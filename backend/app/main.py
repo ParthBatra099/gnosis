@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from app.api.v1.access import router as access_router
+from app.api.v1.ai import router as ai_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.console import router as console_router
 from app.api.v1.monitoring import router as monitoring_router
@@ -18,6 +19,7 @@ app.include_router(resources_router, prefix="/resources", tags=["Resources"])
 app.include_router(access_router, prefix="/access", tags=["Access"])
 app.include_router(monitoring_router, prefix="/monitoring", tags=["Monitoring"])
 app.include_router(console_router, prefix="/console", tags=["Console"])
+app.include_router(ai_router, prefix="/ai", tags=["AI Investigator"])
 
 
 @app.get("/health", status_code=200)
