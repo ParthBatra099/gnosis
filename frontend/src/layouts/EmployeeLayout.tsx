@@ -1,0 +1,24 @@
+import { useState } from 'react';
+import { Outlet } from 'react-router-dom';
+import { Sidebar } from '../components/layout/Sidebar';
+import { Topbar } from '../components/layout/Topbar';
+import '../styles/shell.css';
+
+export function EmployeeLayout() {
+  const [mobileOpen, setMobileOpen] = useState<boolean>(false);
+
+  const toggleMobile = () => setMobileOpen((prev) => !prev);
+  const closeMobile = () => setMobileOpen(false);
+
+  return (
+    <div className="gnosis-shell">
+      <Sidebar mobileOpen={mobileOpen} onCloseMobile={closeMobile} />
+      <div className="gnosis-main-wrapper">
+        <Topbar pageTitle="Employee Portal" onToggleMobile={toggleMobile} />
+        <main className="gnosis-content-area">
+          <Outlet />
+        </main>
+      </div>
+    </div>
+  );
+}

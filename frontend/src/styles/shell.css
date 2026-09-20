@@ -1,0 +1,404 @@
+/* GNOSIS Application Shell Styles */
+
+.gnosis-shell {
+    display: flex;
+    min-height: 100vh;
+    width: 100%;
+    background-color: #0b0f19;
+    color: #f1f5f9;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+}
+
+.gnosis-main-wrapper {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    background-color: #0b0f19;
+}
+
+.gnosis-content-area {
+    flex: 1;
+    padding: 1.5rem;
+    overflow-y: auto;
+    box-sizing: border-box;
+}
+
+
+/* --- SIDEBAR STYLES --- */
+
+.gnosis-sidebar {
+    width: 16rem;
+    background-color: #0f172a;
+    border-right: 1px solid #1e293b;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    box-sizing: border-box;
+    user-select: none;
+    transition: transform 0.2s ease-in-out;
+}
+
+.gnosis-sidebar-header {
+    height: 4rem;
+    display: flex;
+    align-items: center;
+    padding: 0 1.25rem;
+    border-bottom: 1px solid #1e293b;
+    gap: 0.75rem;
+}
+
+.gnosis-sidebar-brand-badge {
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 0.5rem;
+    background-color: rgba(6, 182, 212, 0.1);
+    border: 1px solid rgba(6, 182, 212, 0.25);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #06b6d4;
+    box-shadow: 0 0 12px rgba(6, 182, 212, 0.12);
+}
+
+.gnosis-sidebar-brand-badge svg {
+    width: 1.25rem;
+    height: 1.25rem;
+}
+
+.gnosis-sidebar-brand-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.gnosis-sidebar-title {
+    margin: 0;
+    font-size: 1.125rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    color: #f8fafc;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.gnosis-sidebar-subtitle {
+    margin: 0;
+    font-size: 0.625rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #06b6d4;
+}
+
+.gnosis-sidebar-nav {
+    flex: 1;
+    padding: 1.25rem 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    overflow-y: auto;
+}
+
+.gnosis-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.625rem 0.75rem;
+    border-radius: 0.5rem;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: #94a3b8;
+    text-decoration: none;
+    border: 1px solid transparent;
+    transition: all 0.15s ease;
+    cursor: pointer;
+    background: none;
+    width: 100%;
+    text-align: left;
+    box-sizing: border-box;
+}
+
+.gnosis-nav-item:hover:not(.disabled) {
+    color: #e2e8f0;
+    background-color: rgba(30, 41, 59, 0.6);
+}
+
+.gnosis-nav-item.active {
+    color: #06b6d4;
+    background-color: rgba(6, 182, 212, 0.1);
+    border-color: rgba(6, 182, 212, 0.25);
+    box-shadow: 0 0 10px rgba(6, 182, 212, 0.08);
+}
+
+.gnosis-nav-item.disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.gnosis-nav-item-icon {
+    width: 1rem;
+    height: 1rem;
+    flex-shrink: 0;
+}
+
+.gnosis-nav-item-badge {
+    margin-left: auto;
+    font-size: 0.625rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    padding: 0.125rem 0.375rem;
+    border-radius: 0.25rem;
+    background-color: #1e293b;
+    color: #64748b;
+    text-transform: uppercase;
+}
+
+.gnosis-sidebar-footer {
+    padding: 1rem 0.875rem;
+    border-top: 1px solid #1e293b;
+    background-color: rgba(2, 6, 23, 0.4);
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.gnosis-sidebar-user-block {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+}
+
+.gnosis-sidebar-avatar {
+    width: 2rem;
+    height: 2rem;
+    border-radius: 50%;
+    background-color: #1e293b;
+    border: 1px solid #334155;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #cbd5e1;
+    flex-shrink: 0;
+}
+
+.gnosis-sidebar-user-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.gnosis-sidebar-user-name {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #f1f5f9;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.gnosis-sidebar-user-email {
+    font-size: 0.6875rem;
+    color: #64748b;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.gnosis-sidebar-role-tag {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    font-size: 0.625rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 0.125rem 0.375rem;
+    border-radius: 0.25rem;
+    background-color: rgba(6, 182, 212, 0.1);
+    color: #06b6d4;
+    border: 1px solid rgba(6, 182, 212, 0.25);
+    margin-top: 0.25rem;
+}
+
+.gnosis-sidebar-signout-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.5rem;
+    border-radius: 0.375rem;
+    background-color: #1e293b;
+    border: 1px solid #334155;
+    color: #cbd5e1;
+    font-size: 0.75rem;
+    font-weight: 600;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    box-sizing: border-box;
+}
+
+.gnosis-sidebar-signout-btn:hover {
+    background-color: rgba(239, 68, 68, 0.12);
+    border-color: rgba(239, 68, 68, 0.3);
+    color: #fca5a5;
+}
+
+
+/* --- TOPBAR STYLES --- */
+
+.gnosis-topbar {
+    height: 4rem;
+    background-color: rgba(15, 23, 42, 0.8);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid #1e293b;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 1.5rem;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    box-sizing: border-box;
+}
+
+.gnosis-topbar-left {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.gnosis-mobile-toggle {
+    display: none;
+    background: none;
+    border: 1px solid #334155;
+    color: #cbd5e1;
+    padding: 0.375rem;
+    border-radius: 0.375rem;
+    cursor: pointer;
+}
+
+.gnosis-topbar-page-title {
+    margin: 0;
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: #f8fafc;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.gnosis-topbar-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.25rem 0.625rem;
+    border-radius: 9999px;
+    background-color: rgba(15, 23, 42, 0.9);
+    border: 1px solid #334155;
+    font-size: 0.6875rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    color: #cbd5e1;
+}
+
+.gnosis-status-dot {
+    width: 0.375rem;
+    height: 0.375rem;
+    border-radius: 50%;
+    background-color: #10b981;
+    box-shadow: 0 0 6px #10b981;
+}
+
+.gnosis-topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.gnosis-topbar-user-info {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    border-right: 1px solid #1e293b;
+    padding-right: 1rem;
+}
+
+.gnosis-topbar-user-details {
+    text-align: right;
+    display: flex;
+    flex-direction: column;
+}
+
+.gnosis-topbar-user-name {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: #f1f5f9;
+}
+
+.gnosis-topbar-user-role {
+    font-size: 0.6875rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    color: #06b6d4;
+    text-transform: uppercase;
+}
+
+.gnosis-topbar-action-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.4375rem;
+    border-radius: 0.375rem;
+    background-color: #1e293b;
+    border: 1px solid #334155;
+    color: #cbd5e1;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.gnosis-topbar-action-btn:hover {
+    background-color: rgba(239, 68, 68, 0.12);
+    border-color: rgba(239, 68, 68, 0.3);
+    color: #fca5a5;
+}
+
+.gnosis-sidebar-backdrop {
+    display: none;
+}
+
+
+/* --- RESPONSIVE MOBILE BREAKPOINT --- */
+
+@media (max-width: 768px) {
+    .gnosis-mobile-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .gnosis-sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        transform: translateX(-100%);
+    }
+    .gnosis-sidebar.mobile-open {
+        transform: translateX(0);
+    }
+    .gnosis-sidebar-backdrop {
+        display: block;
+        position: fixed;
+        inset: 0;
+        background-color: rgba(2, 6, 23, 0.7);
+        backdrop-filter: blur(4px);
+        z-index: 15;
+    }
+    .gnosis-topbar-user-details {
+        display: none;
+    }
+    .gnosis-topbar-user-info {
+        border-right: none;
+        padding-right: 0;
+    }
+}
