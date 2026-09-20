@@ -6,7 +6,7 @@ from app.schemas.ai import EvidenceItem, InvestigationResponse
 
 
 def parse_intent(question: str) -> str:
-    """Deterministic, keyword-based intent parsing for Phase 5A."""
+    """Deterministic, keyword-based intent parsing for Phase 5A/5B."""
     q_lower = question.lower()
 
     if any(k in q_lower for k in ["denied", "deny", "why was access", "permission", "blocked"]):
@@ -33,14 +33,15 @@ def run_investigation(
     evidence: list[EvidenceItem] = []
 
     if intent == "ACCESS_DENIAL_ANALYSIS":
-        audit_events = (
-            tools.get_resource_security_activity(db, user, resource_id, limit=5)
-            if resource_id
-            else tools.get_recent_audit_events(db, user, limit=5)
+        audit_events = tools.get_audit_events(
+            db=db,
+            user=user,
+            resource_id=resource_id,
+            outcome="DENY",
+            limit=5,
         )
 
-        denials = [a for a in audit_events if a.outcome == "DENY"]
-        for d in denials:
+        for d in audit_events:
             evidence.append(
                 EvidenceItem(
                     source_type="audit_event",
@@ -65,30 +66,28 @@ def run_investigation(
 
     elif intent == "INCIDENT_INVESTIGATION":
         if incident_id:
-            incident = tools.get_incident(db, user, incident_id)
-            incidents = [incident] if incident else []
+            evidence = tools.get_incident_evidence(db, user, incident_id)
         else:
             incidents = tools.get_recent_incidents(db, user, limit=5)
-
-        for inc in incidents:
-            evidence.append(
-                EvidenceItem(
-                    source_type="incident",
-                    source_id=inc.id,
-                    severity=inc.severity,
-                    timestamp=inc.created_at,
-                    description=f"Incident '{inc.title}' status is {inc.status}.",
-                    details={
-                        "title": inc.title,
-                        "status": inc.status,
-                        "severity": inc.severity,
-                        "resource_id": inc.resource_id,
-                    },
+            for inc in incidents:
+                evidence.append(
+                    EvidenceItem(
+                        source_type="incident",
+                        source_id=inc.id,
+                        severity=inc.severity,
+                        timestamp=inc.created_at,
+                        description=f"Incident '{inc.title}' status is {inc.status}.",
+                        details={
+                            "title": inc.title,
+                            "status": inc.status,
+                            "severity": inc.severity,
+                            "resource_id": inc.resource_id,
+                        },
+                    )
                 )
-            )
 
         if evidence:
-            summary = f"Retrieved {len(evidence)} incident record(s) matching request scope."
+            summary = f"Retrieved {len(evidence)} evidence item(s) matching request scope."
             severities = [item.severity for item in evidence if item.severity]
             risk_level = (
                 "CRITICAL"
@@ -102,7 +101,12 @@ def run_investigation(
             confidence = "HIGH"
 
     elif intent == "SECURITY_ACTIVITY":
-        sec_events = tools.get_recent_security_events(db, user, limit=5)
+        sec_events = tools.get_security_events(
+            db=db,
+            user=user,
+            resource_id=resource_id,
+            limit=5,
+        )
         for s in sec_events:
             evidence.append(
                 EvidenceItem(

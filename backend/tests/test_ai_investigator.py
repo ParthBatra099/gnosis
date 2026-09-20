@@ -4,12 +4,14 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.ai import tools
 from app.core.database import Base, get_db
 from app.core.security import create_access_token, hash_password
 from app.main import app
 from app.models.audit_event import AuditEvent
 from app.models.department import Department
 from app.models.incident import Incident
+from app.models.incident_event import IncidentEvent
 from app.models.resource import Resource
 from app.models.security_event import SecurityEvent
 from app.models.user import User
@@ -17,7 +19,7 @@ from app.models.user import User
 
 @pytest.fixture
 def db_session():
-    """Isolated SQLite in-memory DB for Phase 5A AI Investigator tests."""
+    """Isolated SQLite in-memory DB for Phase 5A/5B AI Investigator tests."""
     engine = create_engine(
         "sqlite:///:memory:",
         connect_args={"check_same_thread": False},
@@ -274,3 +276,179 @@ def test_nonexistent_incident_id_returns_neutral_response(client, db_session):
     assert data["risk_level"] == "LOW"
     assert len(data["evidence"]) == 0
     assert data["summary"] == "No authorized incidents found matching the request criteria."
+
+
+def test_phase5b_audit_retrieval_filtering_and_authorization(db_session):
+    """11. Verifies authorized audit retrieval, parameter filtering, and unauthorized isolation."""
+    owner = db_session.query(User).filter_by(email="owner@gnosis.com").first()
+    unauth = db_session.query(User).filter_by(email="unauth@gnosis.com").first()
+    res = db_session.query(Resource).first()
+
+    # Authorized owner retrieves audit events with filters
+    events = tools.get_audit_events(
+        db=db_session,
+        user=owner,
+        resource_id=res.id,
+        outcome="DENY",
+        limit=5,
+    )
+    assert len(events) == 1
+    assert events[0].outcome == "DENY"
+
+    # Unauthorized user attempting to query owner's activity on resource returns zero events
+    unauth_events = tools.get_audit_events(
+        db=db_session,
+        user=unauth,
+        resource_id=res.id,
+        actor_id=owner.id,
+        limit=5,
+    )
+    assert len(unauth_events) == 0
+
+
+def test_phase5b_security_event_filtering_and_scope(db_session):
+    """12. Verifies security event filtering by severity and event_type within scope."""
+    owner = db_session.query(User).filter_by(email="owner@gnosis.com").first()
+    unauth = db_session.query(User).filter_by(email="unauth@gnosis.com").first()
+
+    sec_events = tools.get_security_events(
+        db=db_session,
+        user=owner,
+        severity="CRITICAL",
+        limit=10,
+    )
+    assert len(sec_events) == 1
+    assert sec_events[0].severity == "CRITICAL"
+
+    unauth_sec_events = tools.get_security_events(
+        db=db_session,
+        user=unauth,
+        actor_id=owner.id,
+        severity="CRITICAL",
+        limit=10,
+    )
+    assert len(unauth_sec_events) == 0
+
+
+def test_phase5b_resource_activity_boundary(db_session):
+    """13. Verifies resource activity isolation between owners and non-owners."""
+    owner = db_session.query(User).filter_by(email="owner@gnosis.com").first()
+    unauth = db_session.query(User).filter_by(email="unauth@gnosis.com").first()
+    res = db_session.query(Resource).first()
+
+    # Owner gets all resource activity
+    owner_act = tools.get_resource_activity(db_session, owner, res.id, limit=5)
+    assert len(owner_act) == 1
+
+    # Non-owner gets their own activity on that resource
+    unauth_act = tools.get_resource_activity(db_session, unauth, res.id, limit=5)
+    assert len(unauth_act) == 1
+    assert unauth_act[0].actor_id == unauth.id
+
+
+def test_phase5b_incident_evidence_assembly(db_session):
+    """14. Verifies structured incident evidence retrieval including attached security events."""
+    owner = db_session.query(User).filter_by(email="owner@gnosis.com").first()
+    unauth = db_session.query(User).filter_by(email="unauth@gnosis.com").first()
+    inc = db_session.query(Incident).first()
+
+    evidence = tools.get_incident_evidence(db_session, owner, inc.id)
+    assert len(evidence) >= 1
+    assert evidence[0].source_type == "incident"
+
+    unauth_evidence = tools.get_incident_evidence(db_session, unauth, inc.id)
+    assert len(unauth_evidence) == 0
+
+
+def test_phase5b_nonexistent_ids_handling(db_session):
+    """15. Verifies nonexistent resource or incident IDs return empty evidence safely without error."""
+    owner = db_session.query(User).filter_by(email="owner@gnosis.com").first()
+
+    no_act = tools.get_resource_activity(db_session, owner, "nonexistent-id")
+    assert len(no_act) == 0
+
+    no_ev = tools.get_incident_evidence(db_session, owner, "nonexistent-id")
+    assert len(no_ev) == 0
+
+
+def test_phase5b_limit_bounds_enforced(db_session):
+    """16. Verifies limits are safely capped to prevent resource exhaustion."""
+    owner = db_session.query(User).filter_by(email="owner@gnosis.com").first()
+
+    events = tools.get_audit_events(db_session, owner, limit=9999)
+    assert len(events) <= 100
+
+
+def test_phase5b_read_only_guarantee(db_session):
+    """17. Verifies executing Phase 5B tools produces zero database mutations."""
+    owner = db_session.query(User).filter_by(email="owner@gnosis.com").first()
+    res = db_session.query(Resource).first()
+    inc = db_session.query(Incident).first()
+
+    audit_count = db_session.query(AuditEvent).count()
+    sec_count = db_session.query(SecurityEvent).count()
+    inc_count = db_session.query(Incident).count()
+
+    tools.get_audit_events(db_session, owner, resource_id=res.id)
+    tools.get_security_events(db_session, owner, severity="CRITICAL")
+    tools.get_resource_activity(db_session, owner, res.id)
+    tools.get_incident_evidence(db_session, owner, inc.id)
+
+    assert db_session.query(AuditEvent).count() == audit_count
+    assert db_session.query(SecurityEvent).count() == sec_count
+    assert db_session.query(Incident).count() == inc_count
+
+
+def test_phase5b_incident_evidence_includes_linked_audit_events(db_session):
+    """18. Verifies incident evidence includes Incident, SecurityEvent, and linked AuditEvent."""
+    owner = db_session.query(User).filter_by(email="owner@gnosis.com").first()
+    res = db_session.query(Resource).first()
+    unauth = db_session.query(User).filter_by(email="unauth@gnosis.com").first()
+
+    # Create linked chain: AuditEvent -> SecurityEvent -> IncidentEvent -> Incident
+    audit = AuditEvent(
+        actor_id=unauth.id,
+        action="RESOURCE_ACCESS",
+        resource_id=res.id,
+        outcome="DENY",
+        reason="DENY_DEPARTMENT_MISMATCH",
+    )
+    db_session.add(audit)
+    db_session.commit()
+
+    sec = SecurityEvent(
+        event_type="CRITICAL_RESOURCE_ACCESS",
+        severity="CRITICAL",
+        resource_id=res.id,
+        actor_id=unauth.id,
+        source_audit_id=audit.id,
+        description="Critical access attempt",
+    )
+    db_session.add(sec)
+    db_session.commit()
+
+    inc = Incident(
+        title="Audited Intrusion",
+        description="Testing audit chain",
+        severity="CRITICAL",
+        status="OPEN",
+        resource_id=res.id,
+    )
+    db_session.add(inc)
+    db_session.commit()
+
+    inc_event = IncidentEvent(incident_id=inc.id, security_event_id=sec.id)
+    db_session.add(inc_event)
+    db_session.commit()
+
+    # Authorized resource owner retrieves full chain (Incident + SecurityEvent + AuditEvent)
+    evidence = tools.get_incident_evidence(db_session, owner, inc.id)
+    source_types = [e.source_type for e in evidence]
+    assert "incident" in source_types
+    assert "security_event" in source_types
+    assert "audit_event" in source_types
+    assert len(evidence) == 3
+
+    # Unauthorized user receives empty evidence list
+    unauth_evidence = tools.get_incident_evidence(db_session, unauth, inc.id)
+    assert len(unauth_evidence) == 0

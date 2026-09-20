@@ -9,6 +9,22 @@ class InvestigationRequest(BaseModel):
     incident_id: str | None = None
 
 
+class AuditFilterRequest(BaseModel):
+    resource_id: str | None = None
+    actor_id: str | None = None
+    action: str | None = None
+    outcome: str | None = None
+    limit: int = Field(default=10, ge=1, le=100)
+
+
+class SecurityEventFilterRequest(BaseModel):
+    resource_id: str | None = None
+    actor_id: str | None = None
+    event_type: str | None = None
+    severity: str | None = None
+    limit: int = Field(default=10, ge=1, le=100)
+
+
 class EvidenceItem(BaseModel):
     source_type: str
     source_id: str
