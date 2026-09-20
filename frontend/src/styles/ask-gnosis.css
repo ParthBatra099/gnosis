@@ -1,0 +1,318 @@
+.gnosis-ask {
+    --ask-bg: #0b1220;
+    --ask-panel: #0f172a;
+    --ask-panel-alt: #111c33;
+    --ask-border: #1e293b;
+    --ask-text: #e2e8f0;
+    --ask-muted: #94a3b8;
+    --ask-accent: #22d3ee;
+    --ask-accent-soft: rgba(34, 211, 238, 0.1);
+    --ask-accent-border: rgba(34, 211, 238, 0.35);
+    --ask-danger: #f87171;
+    --ask-danger-soft: rgba(248, 113, 113, 0.08);
+    --ask-danger-border: rgba(248, 113, 113, 0.45);
+    --ask-warn-soft: rgba(251, 191, 36, 0.06);
+    --ask-warn-border: rgba(251, 191, 36, 0.4);
+    --ask-mono: ui-monospace, 'SFMono-Regular', Consolas, monospace;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    width: 100%;
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 24px;
+    background: var(--ask-bg);
+    border: 1px solid var(--ask-border);
+    border-radius: 12px;
+    color: var(--ask-text);
+    text-align: left;
+    font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    letter-spacing: normal;
+}
+
+.gnosis-ask *,
+.gnosis-ask *::before,
+.gnosis-ask *::after {
+    box-sizing: border-box;
+}
+
+.gnosis-ask__header {
+    border-bottom: 1px solid var(--ask-border);
+    padding-bottom: 16px;
+}
+
+.gnosis-ask__title {
+    margin: 0;
+    font-family: var(--ask-mono);
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: var(--ask-accent);
+}
+
+.gnosis-ask__subtitle {
+    margin: 6px 0 0;
+    color: var(--ask-muted);
+    font-size: 13px;
+}
+
+.gnosis-ask__transcript {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-height: 220px;
+    max-height: 60vh;
+    overflow-y: auto;
+    padding: 16px;
+    background: var(--ask-panel);
+    border: 1px solid var(--ask-border);
+    border-radius: 10px;
+}
+
+.gnosis-ask__empty {
+    margin: auto;
+    text-align: center;
+}
+
+.gnosis-ask__empty-text {
+    margin: 0 0 12px;
+    color: var(--ask-muted);
+}
+
+.gnosis-ask__examples {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+}
+
+.gnosis-ask__example {
+    padding: 6px 12px;
+    background: transparent;
+    border: 1px solid var(--ask-accent-border);
+    border-radius: 999px;
+    color: var(--ask-accent);
+    font-family: var(--ask-mono);
+    font-size: 12px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.gnosis-ask__example:hover {
+    background: var(--ask-accent-soft);
+}
+
+.gnosis-ask__exchange {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.gnosis-ask__message {
+    padding: 12px 14px;
+    background: var(--ask-panel-alt);
+    border: 1px solid var(--ask-border);
+    border-radius: 8px;
+}
+
+.gnosis-ask__message--user {
+    background: var(--ask-accent-soft);
+    border-color: var(--ask-accent-border);
+}
+
+.gnosis-ask__message--denied {
+    background: var(--ask-warn-soft);
+    border-color: var(--ask-warn-border);
+}
+
+.gnosis-ask__message--error {
+    background: var(--ask-danger-soft);
+    border-color: var(--ask-danger-border);
+}
+
+.gnosis-ask__role {
+    display: block;
+    margin-bottom: 4px;
+    color: var(--ask-muted);
+    font-family: var(--ask-mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+}
+
+.gnosis-ask__text {
+    margin: 0;
+    color: var(--ask-text);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.gnosis-ask__message--error .gnosis-ask__text {
+    color: var(--ask-danger);
+}
+
+.gnosis-ask__pending {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    color: var(--ask-muted);
+}
+
+.gnosis-ask__spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--ask-accent);
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: gnosis-ask-spin 0.8s linear infinite;
+}
+
+@keyframes gnosis-ask-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .gnosis-ask__spinner {
+        animation-duration: 2.4s;
+    }
+}
+
+.gnosis-ask__sources {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--ask-border);
+}
+
+.gnosis-ask__sources-label {
+    color: var(--ask-muted);
+    font-family: var(--ask-mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.gnosis-ask__source-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin: 6px 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.gnosis-ask__source {
+    padding: 4px 8px;
+    background: var(--ask-bg);
+    border: 1px solid var(--ask-border);
+    border-radius: 6px;
+    color: var(--ask-muted);
+    font-family: var(--ask-mono);
+    font-size: 12px;
+    overflow-wrap: anywhere;
+}
+
+.gnosis-ask__composer {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.gnosis-ask__label {
+    color: var(--ask-muted);
+    font-family: var(--ask-mono);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+}
+
+.gnosis-ask__input {
+    width: 100%;
+    min-height: 84px;
+    padding: 12px;
+    background: var(--ask-panel);
+    border: 1px solid var(--ask-border);
+    border-radius: 8px;
+    color: var(--ask-text);
+    font: inherit;
+    resize: vertical;
+}
+
+.gnosis-ask__input::placeholder {
+    color: var(--ask-muted);
+}
+
+.gnosis-ask__input:focus {
+    outline: none;
+    border-color: var(--ask-accent);
+    box-shadow: 0 0 0 2px var(--ask-accent-soft);
+}
+
+.gnosis-ask__footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.gnosis-ask__help {
+    color: var(--ask-muted);
+    font-family: var(--ask-mono);
+    font-size: 11px;
+}
+
+.gnosis-ask__help--error {
+    color: var(--ask-danger);
+}
+
+.gnosis-ask__submit {
+    padding: 10px 20px;
+    background: var(--ask-accent);
+    border: none;
+    border-radius: 8px;
+    color: #04121a;
+    font-family: var(--ask-mono);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    transition: opacity 0.15s ease;
+}
+
+.gnosis-ask__submit:hover:not(:disabled) {
+    opacity: 0.88;
+}
+
+.gnosis-ask__submit:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.gnosis-ask__submit:focus-visible,
+.gnosis-ask__example:focus-visible {
+    outline: 2px solid var(--ask-accent);
+    outline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+    .gnosis-ask {
+        padding: 16px;
+        gap: 16px;
+    }
+    .gnosis-ask__transcript {
+        max-height: 55vh;
+        padding: 12px;
+    }
+    .gnosis-ask__footer {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .gnosis-ask__submit {
+        width: 100%;
+    }
+}

@@ -8,6 +8,7 @@ import {
   KeyRound,
   AlertTriangle,
   Activity,
+  MessageSquare,
   LogOut,
   User as UserIcon,
 } from 'lucide-react';
@@ -31,6 +32,7 @@ export function Sidebar({ mobileOpen, onCloseMobile }: SidebarProps) {
 
   const employeeNavItems: NavItem[] = [
     { label: 'Dashboard', to: '/employee', icon: LayoutDashboard, enabled: true },
+    { label: 'Ask GNOSIS', to: '/ask-gnosis', icon: MessageSquare, enabled: true },
     { label: 'Resources', to: '/employee/resources', icon: Database, enabled: false },
     { label: 'Access Requests', to: '/employee/access-requests', icon: KeyRound, enabled: false },
     { label: 'Activity', to: '/employee/activity', icon: Activity, enabled: false },
@@ -38,6 +40,7 @@ export function Sidebar({ mobileOpen, onCloseMobile }: SidebarProps) {
 
   const adminNavItems: NavItem[] = [
     { label: 'Dashboard', to: '/admin', icon: LayoutDashboard, enabled: true },
+    { label: 'Ask GNOSIS', to: '/ask-gnosis', icon: MessageSquare, enabled: true },
     { label: 'Access Requests', to: '/admin/access-requests', icon: KeyRound, enabled: false },
     { label: 'Security Events', to: '/admin/security-events', icon: ShieldAlert, enabled: false },
     { label: 'Incidents', to: '/admin/incidents', icon: AlertTriangle, enabled: false },

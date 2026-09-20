@@ -5,6 +5,7 @@ import { EmployeeLayout } from '../layouts/EmployeeLayout';
 import { AdminLayout } from '../layouts/AdminLayout';
 import { Login } from '../pages/auth/Login';
 import { EmployeeHome } from '../pages/employee/EmployeeHome';
+import { AskGnosis } from '../pages/employee/AskGnosis';
 import { AdminHome } from '../pages/admin/AdminHome';
 
 function RootRedirect() {
@@ -32,12 +33,32 @@ function RootRedirect() {
   return <Navigate to="/employee" replace />;
 }
 
+// Picks the existing layout that matches the signed-in user's role, so pages
+// shared by every authenticated user keep the admin or employee shell.
+function SharedLayout() {
+  const { user } = useAuth();
+  const isAdmin = user?.role?.toUpperCase() === 'ADMIN';
+
+  return isAdmin ? <AdminLayout /> : <EmployeeLayout />;
+}
+
 export function AppRoutes() {
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<RootRedirect />} />
         <Route path="/login" element={<Login />} />
+
+        {/* Shared routes: any authenticated user (ADMIN or EMPLOYEE) */}
+        <Route
+          element={
+            <ProtectedRoute>
+              <SharedLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route path="/ask-gnosis" element={<AskGnosis />} />
+        </Route>
 
         {/* Employee Shell Route Hierarchy */}
         <Route
@@ -49,6 +70,7 @@ export function AppRoutes() {
           }
         >
           <Route index element={<EmployeeHome />} />
+          <Route path="ask" element={<Navigate to="/ask-gnosis" replace />} />
         </Route>
 
         {/* Admin Shell Route Hierarchy */}
