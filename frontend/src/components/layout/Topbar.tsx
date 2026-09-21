@@ -1,4 +1,9 @@
-import { Menu, LogOut } from 'lucide-react';
+import {
+  Menu,
+  LogOut,
+  ShieldCheck,
+} from 'lucide-react';
+
 import { useAuth } from '../../hooks/useAuth';
 
 interface TopbarProps {
@@ -6,49 +11,108 @@ interface TopbarProps {
   onToggleMobile: () => void;
 }
 
-export function Topbar({ pageTitle, onToggleMobile }: TopbarProps) {
+export function Topbar({
+  pageTitle,
+  onToggleMobile,
+}: TopbarProps) {
   const { user, logout } = useAuth();
 
   return (
     <header className="gnosis-topbar">
+
+      {/* =========================================
+          LEFT
+      ========================================== */}
+
       <div className="gnosis-topbar-left">
+
         <button
           type="button"
           className="gnosis-mobile-toggle"
           onClick={onToggleMobile}
           aria-label="Toggle navigation menu"
         >
-          <Menu style={{ width: '1.25rem', height: '1.25rem' }} />
+          <Menu />
         </button>
 
-        <h2 className="gnosis-topbar-page-title">{pageTitle}</h2>
+        <div className="gnosis-topbar-heading">
 
-        <div className="gnosis-topbar-status-badge">
-          <span className="gnosis-status-dot" />
-          <span>SYSTEM ONLINE</span>
+          <span className="gnosis-topbar-kicker">
+            GNOSIS
+          </span>
+
+          <h1 className="gnosis-topbar-page-title">
+            {pageTitle}
+          </h1>
+
         </div>
+
       </div>
 
+
+      {/* =========================================
+          RIGHT
+      ========================================== */}
+
       <div className="gnosis-topbar-right">
+
+        <div className="gnosis-topbar-security">
+
+          <span className="gnosis-topbar-security-icon">
+            <ShieldCheck />
+          </span>
+
+          <div>
+            <span className="gnosis-topbar-security-title">
+              Secure session
+            </span>
+
+            <span className="gnosis-topbar-security-status">
+              <span />
+              Protected
+            </span>
+          </div>
+
+        </div>
+
+
         {user && (
-          <div className="gnosis-topbar-user-info">
-            <div className="gnosis-topbar-user-details">
-              <span className="gnosis-topbar-user-name">{user.name}</span>
-              <span className="gnosis-topbar-user-role">{user.role}</span>
+          <div className="gnosis-topbar-user">
+
+            <div className="gnosis-topbar-avatar">
+              {(user.name || 'U')
+                .charAt(0)
+                .toUpperCase()}
             </div>
+
+            <div className="gnosis-topbar-user-details">
+
+              <span className="gnosis-topbar-user-name">
+                {user.name}
+              </span>
+
+              <span className="gnosis-topbar-user-role">
+                {user.role}
+              </span>
+
+            </div>
+
           </div>
         )}
+
 
         <button
           type="button"
           className="gnosis-topbar-action-btn"
           onClick={logout}
-          title="Sign Out"
-          aria-label="Sign Out"
+          title="Sign out"
+          aria-label="Sign out"
         >
-          <LogOut style={{ width: '1rem', height: '1rem' }} />
+          <LogOut />
         </button>
+
       </div>
+
     </header>
   );
 }

@@ -72,8 +72,8 @@ ROLE_FALLBACKS: dict[str, list[str]] = {
 
 USERS = [
     dict(name="Parth Batra", email="parth@gnosis.com", role="ADMIN", dept="IT", password="Parth@12345"),
-    dict(name="Prapti Gupta", email="prapti@gnosis.com", role="MANAGER", dept="HR", password="Prapti@12345"),
-    dict(name="Om Sharma", email="om@gnosis.com", role="SECURITY_OFFICER", dept="IT", password="Om@12345"),
+    dict(name="Prapti Singhal", email="prapti@gnosis.com", role="MANAGER", dept="HR", password="Prapti@12345"),
+    dict(name="Om Shukla", email="om@gnosis.com", role="SECURITY_OFFICER", dept="IT", password="Om@12345"),
     dict(name="Aarav Mehta", email="aarav@gnosis.com", role="EMPLOYEE", dept="Finance", password="Aarav@12345"),
     dict(name="Riya Kapoor", email="riya@gnosis.com", role="EMPLOYEE", dept="Sales", password="Riya@12345"),
     dict(name="Kunal Verma", email="kunal@gnosis.com", role="EMPLOYEE", dept="HR", password="Kunal@12345"),
