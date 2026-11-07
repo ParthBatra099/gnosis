@@ -69,7 +69,7 @@ export function Sidebar({
       label: 'Access Requests',
       to: '/employee/access-requests',
       icon: KeyRound,
-      enabled: false,
+      enabled: true,
     },
   ];
 
@@ -95,7 +95,7 @@ export function Sidebar({
       label: 'Access Requests',
       to: '/admin/access-requests',
       icon: KeyRound,
-      enabled: false,
+      enabled: true,
     },
     {
       label: 'Security Events',

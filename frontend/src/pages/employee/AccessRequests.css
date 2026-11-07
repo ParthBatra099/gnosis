@@ -1,0 +1,371 @@
+.access-requests-page {
+    width: 100%;
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 8px 0 48px;
+}
+
+.access-requests-header {
+    margin-bottom: 28px;
+}
+
+.access-requests-eyebrow,
+.access-request-card-eyebrow {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: #7891a6;
+}
+
+.access-requests-header h1 {
+    margin: 0;
+    font-size: 32px;
+    font-weight: 700;
+    color: #243446;
+}
+
+.access-requests-header p {
+    max-width: 650px;
+    margin: 10px 0 0;
+    color: #8998a6;
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+
+/* =========================================================
+   MESSAGES
+   ========================================================= */
+
+.access-request-message {
+    margin-bottom: 20px;
+    padding: 14px 18px;
+    border-radius: 10px;
+    font-size: 14px;
+}
+
+.access-request-error {
+    background: #fff1f1;
+    border: 1px solid #f1d0d0;
+    color: #a24b4b;
+}
+
+.access-request-success {
+    background: #eef8f3;
+    border: 1px solid #cfe9dc;
+    color: #39775a;
+}
+
+
+/* =========================================================
+   MAIN CARD
+   ========================================================= */
+
+.access-request-card,
+.my-access-requests {
+    background: #ffffff;
+    border: 1px solid #e4e9ed;
+    border-radius: 16px;
+    box-shadow: 0 8px 30px rgba(24, 43, 60, 0.04);
+}
+
+.access-request-card {
+    margin-bottom: 28px;
+}
+
+.access-request-card-header {
+    padding: 26px 30px 20px;
+    border-bottom: 1px solid #edf0f2;
+}
+
+.access-request-card-header h2,
+.my-access-requests-header h2 {
+    margin: 0;
+    color: #293b4d;
+    font-size: 21px;
+    font-weight: 700;
+}
+
+.access-request-card-header p {
+    max-width: 700px;
+    margin: 8px 0 0;
+    color: #8b99a5;
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+
+/* =========================================================
+   FORM
+   ========================================================= */
+
+.access-request-form {
+    padding: 28px 30px 30px;
+}
+
+.access-request-field {
+    margin-bottom: 22px;
+}
+
+.access-request-field label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+    color: #34485a;
+    font-size: 13px;
+    font-weight: 650;
+}
+
+.access-request-optional {
+    color: #9aa7b1;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.access-request-field select,
+.access-request-field textarea {
+    width: 100%;
+    box-sizing: border-box;
+    border: 1px solid #dbe2e7;
+    border-radius: 9px;
+    background: #ffffff;
+    color: #34485a;
+    font-family: inherit;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.access-request-field select {
+    height: 46px;
+    padding: 0 13px;
+}
+
+.access-request-field textarea {
+    min-height: 120px;
+    padding: 13px;
+    resize: vertical;
+}
+
+.access-request-field select:focus,
+.access-request-field textarea:focus {
+    border-color: #789bb5;
+    box-shadow: 0 0 0 3px rgba(120, 155, 181, 0.12);
+}
+
+.access-request-field select:disabled,
+.access-request-field textarea:disabled {
+    background: #f6f8f9;
+    cursor: not-allowed;
+}
+
+.access-request-form-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    padding-top: 6px;
+}
+
+.access-request-form-footer p {
+    margin: 0;
+    color: #9aa6af;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.access-request-submit {
+    flex-shrink: 0;
+    min-width: 150px;
+    height: 44px;
+    padding: 0 20px;
+    border: 0;
+    border-radius: 8px;
+    background: #1f3447;
+    color: #ffffff;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 650;
+    cursor: pointer;
+    transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.access-request-submit:hover:not(:disabled) {
+    transform: translateY(-1px);
+}
+
+.access-request-submit:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+
+/* =========================================================
+   REQUEST HISTORY
+   ========================================================= */
+
+.my-access-requests {
+    overflow: hidden;
+}
+
+.my-access-requests-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 25px 30px;
+    border-bottom: 1px solid #edf0f2;
+}
+
+.access-request-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 30px;
+    height: 30px;
+    padding: 0 8px;
+    border-radius: 8px;
+    background: #f1f5f7;
+    color: #64798a;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.access-request-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.access-request-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    padding: 22px 30px;
+    border-bottom: 1px solid #edf0f2;
+}
+
+.access-request-item:last-child {
+    border-bottom: 0;
+}
+
+.access-request-item-main {
+    min-width: 0;
+}
+
+.access-request-item-main h3 {
+    margin: 0 0 8px;
+    color: #304355;
+    font-size: 15px;
+    font-weight: 650;
+}
+
+.access-request-meta {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    color: #93a0aa;
+    font-size: 11px;
+}
+
+.access-request-meta span:first-child {
+    color: #70879a;
+    font-weight: 700;
+    letter-spacing: 0.6px;
+}
+
+.access-request-reason {
+    max-width: 700px;
+    margin: 10px 0 0;
+    color: #8795a0;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.access-request-item-status {
+    flex-shrink: 0;
+}
+
+.access-request-status {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 82px;
+    padding: 7px 11px;
+    border-radius: 7px;
+    font-size: 10px;
+    font-weight: 750;
+    letter-spacing: 0.7px;
+}
+
+.access-request-status-pending {
+    background: #fff7e8;
+    color: #9a7334;
+}
+
+.access-request-status-approved {
+    background: #edf8f2;
+    color: #39775a;
+}
+
+.access-request-status-rejected {
+    background: #fff0f0;
+    color: #a25454;
+}
+
+
+/* =========================================================
+   EMPTY / LOADING
+   ========================================================= */
+
+.access-requests-empty,
+.access-requests-loading {
+    padding: 50px 30px;
+    text-align: center;
+    color: #8998a5;
+}
+
+.access-requests-empty h3 {
+    margin: 0 0 8px;
+    color: #435669;
+    font-size: 16px;
+}
+
+.access-requests-empty p {
+    margin: 0;
+    font-size: 13px;
+}
+
+
+/* =========================================================
+   RESPONSIVE
+   ========================================================= */
+
+@media (max-width: 760px) {
+    .access-requests-page {
+        padding: 0 16px 40px;
+    }
+    .access-request-card-header,
+    .access-request-form,
+    .my-access-requests-header,
+    .access-request-item {
+        padding-left: 20px;
+        padding-right: 20px;
+    }
+    .access-request-form-footer {
+        align-items: stretch;
+        flex-direction: column;
+    }
+    .access-request-submit {
+        width: 100%;
+    }
+    .access-request-item {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+    .access-request-item-status {
+        align-self: flex-start;
+    }
+}

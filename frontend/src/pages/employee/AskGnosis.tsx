@@ -1,267 +1,1164 @@
 import { useEffect, useRef, useState } from 'react';
-import type { FormEvent, KeyboardEvent } from 'react';
+import type {
+  FormEvent,
+  KeyboardEvent,
+} from 'react';
+
+import {
+  ArrowUp,
+  BookOpen,
+  Clock3,
+  Copy,
+  FileText,
+  MessageSquare,
+  Plus,
+  RotateCcw,
+  ShieldCheck,
+  Sparkles,
+  User,
+} from 'lucide-react';
+
 import { useAuth } from '../../hooks/useAuth';
-import { askGnosis, isUnauthorizedError } from '../../api/assistant';
+
+import {
+  askGnosis,
+  isUnauthorizedError,
+} from '../../api/assistant';
+
 import '../../styles/ask-gnosis.css';
+
+
+/* =========================================================
+   CONSTANTS
+   ========================================================= */
 
 const MAX_QUERY_LENGTH = 500;
 
-const EXAMPLE_QUESTIONS: string[] = [
-  'What resources can I access?',
-  'Show me my access requests',
-  'What access grants do I have?',
-  'Show me my profile',
-];
 
-type ExchangeStatus = 'pending' | 'success' | 'error';
+/* =========================================================
+   QUICK QUESTIONS
+   ========================================================= */
+
+/* =========================================================
+   TYPES
+   ========================================================= */
+
+type ExchangeStatus =
+  | 'pending'
+  | 'success'
+  | 'error';
 
 interface Exchange {
   id: number;
   query: string;
-  status: ExchangeStatus;
   answer: string;
   sources: string[];
+  status: ExchangeStatus;
   accessDenied: boolean;
 }
 
+
+/* =========================================================
+   COMPONENT
+   ========================================================= */
+
 export function AskGnosis() {
-  const { logout } = useAuth();
-  const [query, setQuery] = useState<string>('');
-  const [exchanges, setExchanges] = useState<Exchange[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [validationMessage, setValidationMessage] = useState<string | null>(null);
-  const nextId = useRef<number>(0);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-  const endRef = useRef<HTMLDivElement>(null);
+
+  const {
+    user,
+    logout,
+  } = useAuth();
+
+
+  /* =======================================================
+     STATE
+     ======================================================= */
+
+  const [query, setQuery] =
+    useState<string>('');
+
+  const [exchanges, setExchanges] =
+    useState<Exchange[]>([]);
+
+  const [isLoading, setIsLoading] =
+    useState<boolean>(false);
+
+  const [validationMessage, setValidationMessage] =
+    useState<string | null>(null);
+
+
+  /* =======================================================
+     REFS
+     ======================================================= */
+
+  const nextId =
+    useRef<number>(0);
+
+  const inputRef =
+    useRef<HTMLTextAreaElement>(null);
+
+  const transcriptEndRef =
+    useRef<HTMLDivElement>(null);
+
+
+  /* =======================================================
+     AUTO SCROLL
+     ======================================================= */
 
   useEffect(() => {
-    if (exchanges.length === 0) return;
-    endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+    transcriptEndRef.current?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'nearest',
+    });
+
   }, [exchanges]);
 
-  async function submitQuestion() {
-    if (isLoading) return;
 
-    const trimmed = query.trim();
-    if (!trimmed) {
-      setValidationMessage('Enter a question to continue.');
+  /* =======================================================
+     HELP RESPONSE
+     ======================================================= */
+
+  const HELP_RESPONSE = `Welcome to Ask GNOSIS.
+
+GNOSIS is an organization security and access-management platform that helps employees securely access company resources while allowing administrators to manage permissions, monitor activity, detect suspicious access, and investigate security events.
+
+You can ask GNOSIS about:
+
+• Resources you can access
+• Your access requests
+• Your active access grants
+• Your profile and role
+• Information about resources available to you
+
+Try asking:
+
+“What resources can I access?”
+“Show my access requests”
+“What access grants do I have?”
+“What is my role?”
+“Tell me about the Employee Handbook”
+
+GNOSIS only provides information that you are authorized to access.`;
+
+
+  /* =======================================================
+     NORMALIZE QUERY
+     ======================================================= */
+
+  function normalizeQuery(
+    value: string,
+  ): string {
+
+    return value
+      .toLowerCase()
+      .replace(/[!?.,]/g, '')
+      .trim();
+
+  }
+
+
+  /* =======================================================
+     IS HELP QUERY?
+     ======================================================= */
+
+  function isHelpQuery(
+    value: string,
+  ): boolean {
+
+    const normalized =
+      normalizeQuery(value);
+
+    const helpQueries = new Set([
+      'help',
+      'help me',
+      'i need help',
+      'can you help me',
+      'what can you do',
+      'what can i ask',
+      'how can you help',
+      'how do i use gnosis',
+      'what is gnosis',
+    ]);
+
+    return helpQueries.has(normalized);
+
+  }
+
+
+  /* =======================================================
+     SUBMIT QUESTION
+     ======================================================= */
+
+  async function submitQuestion(
+    value?: string,
+  ) {
+
+    if (isLoading) {
       return;
     }
 
-    const id = nextId.current;
+
+    const trimmed =
+      (value ?? query).trim();
+
+
+    /* -------------------------------------------------------
+       EMPTY QUERY
+       ------------------------------------------------------- */
+
+    if (!trimmed) {
+
+      setValidationMessage(
+        'Enter a question to continue.',
+      );
+
+      inputRef.current?.focus();
+
+      return;
+    }
+
+
+    /* -------------------------------------------------------
+       CREATE EXCHANGE
+       ------------------------------------------------------- */
+
+    const id =
+      nextId.current;
+
     nextId.current += 1;
 
+
     setValidationMessage(null);
+
     setQuery('');
+
     setIsLoading(true);
-    setExchanges((prev) => [
-      ...prev,
+
+
+    setExchanges((previous) => [
+      ...previous,
+
       {
         id,
         query: trimmed,
-        status: 'pending',
         answer: '',
         sources: [],
+        status: 'pending',
         accessDenied: false,
       },
     ]);
 
-    try {
-      const result = await askGnosis(trimmed);
-      setExchanges((prev) =>
-        prev.map((exchange) =>
-          exchange.id === id
-            ? {
+
+    /* =====================================================
+       HELP
+       ===================================================== */
+
+    if (isHelpQuery(trimmed)) {
+
+      window.setTimeout(() => {
+
+        setExchanges((previous) =>
+          previous.map((exchange) =>
+            exchange.id === id
+              ? {
                 ...exchange,
-                status: 'success',
-                answer: result.answer,
-                sources: result.sources,
-                accessDenied: result.access_denied,
+
+                answer:
+                  HELP_RESPONSE,
+
+                sources: [],
+
+                status:
+                  'success',
+
+                accessDenied:
+                  false,
               }
-            : exchange
-        )
-      );
-    } catch (error) {
-      const expired = isUnauthorizedError(error);
-      setExchanges((prev) =>
-        prev.map((exchange) =>
+              : exchange,
+          ),
+        );
+
+        setIsLoading(false);
+
+      }, 350);
+
+      return;
+    }
+
+
+    /* =====================================================
+       NORMAL GNOSIS REQUEST
+       ===================================================== */
+
+    try {
+
+      const result =
+        await askGnosis(trimmed);
+
+
+      setExchanges((previous) =>
+        previous.map((exchange) =>
           exchange.id === id
             ? {
-                ...exchange,
-                status: 'error',
-                answer: expired
+              ...exchange,
+
+              answer:
+                result.answer,
+
+              sources:
+                result.sources ?? [],
+
+              accessDenied:
+                result.access_denied,
+
+              status:
+                'success',
+            }
+            : exchange,
+        ),
+      );
+
+    } catch (error) {
+
+      const unauthorized =
+        isUnauthorizedError(error);
+
+
+      setExchanges((previous) =>
+        previous.map((exchange) =>
+          exchange.id === id
+            ? {
+              ...exchange,
+
+              status:
+                'error',
+
+              answer:
+                unauthorized
                   ? 'Your session has expired. Please sign in again.'
                   : 'GNOSIS could not process your request. Please try again.',
-              }
-            : exchange
-        )
+            }
+            : exchange,
+        ),
       );
-      if (expired) {
+
+
+      if (unauthorized) {
         logout();
       }
+
     } finally {
+
       setIsLoading(false);
+
     }
+
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+
+  /* =======================================================
+     FORM SUBMIT
+     ======================================================= */
+
+  function handleSubmit(
+    event: FormEvent<HTMLFormElement>,
+  ) {
+
     event.preventDefault();
+
     void submitQuestion();
+
   }
 
-  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+
+  /* =======================================================
+     KEYBOARD
+     ======================================================= */
+
+  function handleKeyDown(
+    event: KeyboardEvent<HTMLTextAreaElement>,
+  ) {
+
     if (
       event.key === 'Enter' &&
       !event.shiftKey &&
       !event.nativeEvent.isComposing
     ) {
+
       event.preventDefault();
+
       void submitQuestion();
+
     }
+
   }
 
-  function handleExampleClick(example: string) {
-    setQuery(example);
+
+  /* =======================================================
+     QUICK QUESTION
+     ======================================================= */
+
+  function handleQuickQuestion(
+    question: string,
+  ) {
+
     setValidationMessage(null);
-    inputRef.current?.focus();
+
+    setQuery(question);
+
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+    });
+
   }
+
+
+  /* =======================================================
+     CLEAR CHAT
+     ======================================================= */
+
+  function clearChat() {
+
+    if (isLoading) {
+      return;
+    }
+
+    setExchanges([]);
+
+    setQuery('');
+
+    setValidationMessage(null);
+
+  }
+
+
+  /* =======================================================
+     COPY RESPONSE
+     ======================================================= */
+
+  function copyResponse(
+    answer: string,
+  ) {
+
+    if (!answer) {
+      return;
+    }
+
+    void navigator.clipboard?.writeText(answer);
+
+  }
+
+
+  /* =======================================================
+     ASK AGAIN
+     ======================================================= */
+
+  function askAgain(
+    previousQuery: string,
+  ) {
+
+    if (isLoading) {
+      return;
+    }
+
+    void submitQuestion(previousQuery);
+
+  }
+
+
+  /* =======================================================
+     DERIVED STATE
+     ======================================================= */
+
+  const hasConversation =
+    exchanges.length > 0;
+
+
+  /* =========================================================
+     RENDER
+     ========================================================= */
 
   return (
-    <section className="gnosis-ask" aria-labelledby="gnosis-ask-title">
-      <header className="gnosis-ask__header">
-        <h1 id="gnosis-ask-title" className="gnosis-ask__title">
-          ASK GNOSIS
-        </h1>
-        <p className="gnosis-ask__subtitle">
-          Ask questions about your authorized GNOSIS information.
-        </p>
-      </header>
 
-      <div
-        className="gnosis-ask__transcript"
-        role="log"
-        aria-live="polite"
-        aria-busy={isLoading}
-      >
-        {exchanges.length === 0 ? (
-          <div className="gnosis-ask__empty">
-            <p className="gnosis-ask__empty-text">
-              No questions yet. Try one of these:
-            </p>
-            <div className="gnosis-ask__examples">
-              {EXAMPLE_QUESTIONS.map((example) => (
-                <button
-                  key={example}
-                  type="button"
-                  className="gnosis-ask__example"
-                  onClick={() => handleExampleClick(example)}
-                >
-                  {example}
-                </button>
-              ))}
-            </div>
+    <section
+      className="gnosis-chat"
+      aria-label="Ask GNOSIS"
+    >
+
+
+      {/* ===================================================
+          BRAND
+          =================================================== */}
+
+      <div className="gnosis-chat__brand">
+
+        <div className="gnosis-chat__brand-mark">
+          <Sparkles size={20} />
+        </div>
+
+        <div>
+
+          <div className="gnosis-chat__brand-name">
+            GNOSIS
           </div>
-        ) : (
-          exchanges.map((exchange) => (
-            <article key={exchange.id} className="gnosis-ask__exchange">
-              <div className="gnosis-ask__message gnosis-ask__message--user">
-                <span className="gnosis-ask__role">USER</span>
-                <p className="gnosis-ask__text">{exchange.query}</p>
-              </div>
 
-              <div
-                className={
-                  'gnosis-ask__message' +
-                  (exchange.status === 'error'
-                    ? ' gnosis-ask__message--error'
-                    : exchange.accessDenied
-                      ? ' gnosis-ask__message--denied'
-                      : '')
-                }
-              >
-                <span className="gnosis-ask__role">GNOSIS</span>
+          <div className="gnosis-chat__brand-status">
+            Authorized information assistant
+          </div>
 
-                {exchange.status === 'pending' ? (
-                  <p className="gnosis-ask__pending">
-                    <span className="gnosis-ask__spinner" aria-hidden="true" />
-                    Processing your question...
-                  </p>
-                ) : (
-                  <>
-                    <p
-                      className="gnosis-ask__text"
-                      role={exchange.status === 'error' ? 'alert' : undefined}
-                    >
-                      {exchange.answer}
-                    </p>
+        </div>
 
-                    {exchange.status === 'success' &&
-                      exchange.sources.length > 0 && (
-                        <div className="gnosis-ask__sources">
-                          <span className="gnosis-ask__sources-label">
-                            Sources
-                          </span>
-                          <ul className="gnosis-ask__source-list">
-                            {exchange.sources.map((source, index) => (
-                              <li
-                                key={`${source}-${index}`}
-                                className="gnosis-ask__source"
-                              >
-                                {source}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                  </>
-                )}
-              </div>
-            </article>
-          ))
-        )}
-        <div ref={endRef} />
       </div>
 
-      <form className="gnosis-ask__composer" onSubmit={handleSubmit} noValidate>
-        <label htmlFor="gnosis-ask-input" className="gnosis-ask__label">
-          Your question
-        </label>
+
+      {/* ===================================================
+          HEADER
+          =================================================== */}
+
+      <header className="gnosis-chat__header">
+
+        <div>
+
+          <h1>
+            Ask GNOSIS
+          </h1>
+
+          <p>
+            Ask questions about your authorized company
+            resources, permissions, requests, and profile.
+          </p>
+
+        </div>
+
+
+        <button
+          type="button"
+          className="gnosis-chat__new-chat"
+          onClick={clearChat}
+          disabled={
+            isLoading ||
+            !hasConversation
+          }
+        >
+
+          <Plus size={16} />
+
+          New chat
+
+        </button>
+
+      </header>
+
+
+      {/* ===================================================
+          WORKSPACE
+          =================================================== */}
+
+      <div className="gnosis-chat__workspace">
+
+
+        {/* =================================================
+            MAIN CONVERSATION
+            ================================================= */}
+
+        <main className="gnosis-chat__conversation">
+
+
+          {!hasConversation ? (
+
+            /* =================================================
+               WELCOME SCREEN
+               ================================================= */
+
+            <div className="gnosis-chat__welcome">
+
+
+              <div className="gnosis-chat__welcome-icon">
+                <Sparkles size={28} />
+              </div>
+
+
+              <h2>
+                How can I help you?
+              </h2>
+
+
+              <p>
+                Ask GNOSIS about information you are
+                authorized to access.
+              </p>
+
+
+              {/* =============================================
+                  QUICK ACTIONS
+                  ============================================= */}
+
+              <div className="gnosis-chat__welcome-grid">
+
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleQuickQuestion(
+                      'What resources can I access?',
+                    )
+                  }
+                >
+
+                  <BookOpen size={18} />
+
+                  <span>
+
+                    <strong>
+                      My Resources
+                    </strong>
+
+                    <small>
+                      View resources available to you
+                    </small>
+
+                  </span>
+
+                </button>
+
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleQuickQuestion(
+                      'Show me my access requests',
+                    )
+                  }
+                >
+
+                  <Clock3 size={18} />
+
+                  <span>
+
+                    <strong>
+                      Access Requests
+                    </strong>
+
+                    <small>
+                      Check your pending requests
+                    </small>
+
+                  </span>
+
+                </button>
+
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleQuickQuestion(
+                      'What access grants do I have?',
+                    )
+                  }
+                >
+
+                  <ShieldCheck size={18} />
+
+                  <span>
+
+                    <strong>
+                      Access Grants
+                    </strong>
+
+                    <small>
+                      See your current permissions
+                    </small>
+
+                  </span>
+
+                </button>
+
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleQuickQuestion(
+                      'What is my role?',
+                    )
+                  }
+                >
+
+                  <User size={18} />
+
+                  <span>
+
+                    <strong>
+                      My Profile
+                    </strong>
+
+                    <small>
+                      View your GNOSIS profile
+                    </small>
+
+                  </span>
+
+                </button>
+
+
+              </div>
+
+
+              {/* =============================================
+                  QUICK QUESTIONS
+                  ============================================= */}
+
+              {/* <div className="gnosis-chat__quick-questions">
+
+                <span>
+                  TRY ASKING
+                </span>
+
+
+                <div>
+
+                  {QUICK_QUESTIONS.map(
+                    (question) => (
+
+                      <button
+                        key={question}
+                        type="button"
+                        onClick={() =>
+                          handleQuickQuestion(
+                            question,
+                          )
+                        }
+                      >
+                        {question}
+                      </button>
+
+                    ),
+                  )}
+
+                </div>
+
+              </div> */}
+
+
+            </div>
+
+
+          ) : (
+
+
+            /* =================================================
+               CONVERSATION
+               ================================================= */
+
+            <div className="gnosis-chat__messages">
+
+
+              {exchanges.map(
+                (exchange) => (
+
+                  <article
+                    key={exchange.id}
+                    className="gnosis-chat__exchange"
+                  >
+
+
+                    {/* =========================================
+                        USER MESSAGE
+                        ========================================= */}
+
+                    <div className="gnosis-chat__user-message">
+
+
+                      <div className="gnosis-chat__user-avatar">
+
+                        {user?.name
+                          ?.charAt(0)
+                          .toUpperCase() || 'U'}
+
+                      </div>
+
+
+                      <div className="gnosis-chat__user-bubble">
+
+                        <span className="gnosis-chat__message-label">
+                          YOU
+                        </span>
+
+                        <p>
+                          {exchange.query}
+                        </p>
+
+                      </div>
+
+                    </div>
+
+
+                    {/* =========================================
+                        GNOSIS MESSAGE
+                        ========================================= */}
+
+                    <div className="gnosis-chat__assistant-message">
+
+
+                      <div className="gnosis-chat__assistant-avatar">
+
+                        <Sparkles size={19} />
+
+                      </div>
+
+
+                      <div className="gnosis-chat__assistant-content">
+
+
+                        <span className="gnosis-chat__message-label">
+                          GNOSIS
+                        </span>
+
+
+                        {exchange.status === 'pending' ? (
+
+
+                          /* ===================================
+                             THINKING
+                             =================================== */
+
+                          <div className="gnosis-chat__thinking">
+
+                            <span />
+                            <span />
+                            <span />
+
+                            <p>
+                              GNOSIS is thinking...
+                            </p>
+
+                          </div>
+
+
+                        ) : (
+
+
+                          <>
+
+
+                            {/* =================================
+                                RESPONSE
+                                ================================= */}
+
+                            <p
+                              className={
+                                exchange.status ===
+                                  'error'
+                                  ? 'gnosis-chat__error'
+                                  : ''
+                              }
+                            >
+                              {exchange.answer}
+                            </p>
+
+
+                            {/* =================================
+                                ACTIONS
+                                ================================= */}
+
+                            {exchange.status ===
+                              'success' && (
+
+                                <div className="gnosis-chat__response-actions">
+
+
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      copyResponse(
+                                        exchange.answer,
+                                      )
+                                    }
+                                  >
+
+                                    <Copy size={13} />
+
+                                    <span>
+                                      Copy
+                                    </span>
+
+                                  </button>
+
+
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      askAgain(
+                                        exchange.query,
+                                      )
+                                    }
+                                    disabled={isLoading}
+                                  >
+
+                                    <RotateCcw size={13} />
+
+                                    <span>
+                                      Ask again
+                                    </span>
+
+                                  </button>
+
+
+                                </div>
+
+                              )}
+
+
+                            {/* =================================
+                                SOURCES
+                                ================================= */}
+
+                            {exchange.sources.length >
+                              0 && (
+
+                                <div className="gnosis-chat__sources">
+
+
+                                  <div className="gnosis-chat__sources-title">
+                                    Sources
+                                  </div>
+
+
+                                  {exchange.sources.map(
+                                    (
+                                      source,
+                                      index,
+                                    ) => (
+
+                                      <div
+                                        key={`${source}-${index}`}
+                                        className="gnosis-chat__source"
+                                      >
+
+                                        <FileText
+                                          size={14}
+                                        />
+
+                                        <span>
+                                          {source}
+                                        </span>
+
+                                      </div>
+
+                                    ),
+                                  )}
+
+                                </div>
+
+                              )}
+
+                          </>
+
+                        )}
+
+                      </div>
+
+                    </div>
+
+
+                  </article>
+
+                ),
+              )}
+
+
+              <div
+                ref={transcriptEndRef}
+              />
+
+
+            </div>
+
+          )}
+
+        </main>
+
+
+        {/* =================================================
+            HISTORY
+            ================================================= */}
+
+        <aside className="gnosis-chat__history">
+
+
+          <div className="gnosis-chat__history-header">
+
+            <div>
+
+              <span>
+                HISTORY
+              </span>
+
+              <h3>
+                Recent chats
+              </h3>
+
+            </div>
+
+            <MessageSquare size={18} />
+
+          </div>
+
+
+          {exchanges.length === 0 ? (
+
+            <div className="gnosis-chat__history-empty">
+
+              Your conversations will appear here.
+
+            </div>
+
+          ) : (
+
+            <div className="gnosis-chat__history-list">
+
+              {exchanges
+                .slice()
+                .reverse()
+                .map(
+                  (exchange) => (
+
+                    <button
+                      key={exchange.id}
+                      type="button"
+                      onClick={() =>
+                        transcriptEndRef.current?.scrollIntoView({
+                          behavior: 'smooth',
+                          block: 'nearest',
+                        })
+                      }
+                    >
+
+                      <MessageSquare
+                        size={14}
+                      />
+
+                      <span>
+                        {exchange.query}
+                      </span>
+
+                    </button>
+
+                  ),
+                )}
+
+            </div>
+
+          )}
+
+        </aside>
+
+
+      </div>
+
+
+      {/* ===================================================
+          COMPOSER
+          =================================================== */}
+
+      <form
+        className="gnosis-chat__composer"
+        onSubmit={handleSubmit}
+        noValidate
+      >
+
+
         <textarea
-          id="gnosis-ask-input"
           ref={inputRef}
-          className="gnosis-ask__input"
-          rows={3}
-          maxLength={MAX_QUERY_LENGTH}
           value={query}
-          placeholder="Ask about your resources, requests, grants or profile..."
-          aria-describedby="gnosis-ask-help"
+          maxLength={MAX_QUERY_LENGTH}
+          rows={1}
+          placeholder="Ask GNOSIS anything..."
           onChange={(event) => {
-            setQuery(event.target.value);
-            if (validationMessage) setValidationMessage(null);
+
+            setQuery(
+              event.target.value,
+            );
+
+            if (validationMessage) {
+
+              setValidationMessage(
+                null,
+              );
+
+            }
+
           }}
           onKeyDown={handleKeyDown}
+          disabled={isLoading}
+          aria-label="Ask GNOSIS"
         />
-        <div className="gnosis-ask__footer">
-          <span
-            id="gnosis-ask-help"
-            className={
-              'gnosis-ask__help' +
-              (validationMessage ? ' gnosis-ask__help--error' : '')
-            }
-            role={validationMessage ? 'alert' : undefined}
-          >
-            {validationMessage ??
-              `Enter to send, Shift+Enter for a new line. ${query.length}/${MAX_QUERY_LENGTH}`}
-          </span>
+
+
+        <div className="gnosis-chat__composer-bottom">
+
+
+          <div className="gnosis-chat__composer-info">
+
+            <ShieldCheck size={15} />
+
+            <span>
+              Authorized information only
+            </span>
+
+            <span className="gnosis-chat__counter">
+              {query.length}/{MAX_QUERY_LENGTH}
+            </span>
+
+          </div>
+
+
           <button
             type="submit"
-            className="gnosis-ask__submit"
-            disabled={isLoading}
+            className="gnosis-chat__send"
+            disabled={
+              isLoading ||
+              !query.trim()
+            }
+            aria-label="Send message"
           >
-            {isLoading ? 'Asking...' : 'Ask GNOSIS'}
+
+            <ArrowUp size={21} />
+
           </button>
+
+
         </div>
+
+
+        {validationMessage && (
+
+          <div className="gnosis-chat__validation">
+
+            {validationMessage}
+
+          </div>
+
+        )}
+
+
       </form>
+
+
+      {/* ===================================================
+          FOOTER
+          =================================================== */}
+
+      <p className="gnosis-chat__footer">
+
+        GNOSIS only responds using information you are
+        authorized to access.
+
+      </p>
+
+
     </section>
+
   );
+
 }

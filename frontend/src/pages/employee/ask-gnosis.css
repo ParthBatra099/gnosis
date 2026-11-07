@@ -1,0 +1,762 @@
+/* =========================================================
+   GNOSIS ASK — CHAT INTERFACE
+   ========================================================= */
+
+.gnosis-chat {
+    --gnosis-bg: #07111f;
+    --gnosis-bg-soft: #0b1727;
+    --gnosis-panel: #0d1a2b;
+    --gnosis-panel-hover: #12243a;
+    --gnosis-border: #233750;
+    --gnosis-border-soft: #1a2c43;
+    --gnosis-text: #f4f7fa;
+    --gnosis-text-soft: #b8c5d4;
+    --gnosis-muted: #71849a;
+    --gnosis-accent: #75b3d1;
+    width: 100%;
+    min-height: calc(100vh - 84px);
+    padding: 34px 42px 28px;
+    background: var(--gnosis-bg);
+    color: var(--gnosis-text);
+    font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+}
+
+.gnosis-chat *,
+.gnosis-chat *::before,
+.gnosis-chat *::after {
+    box-sizing: border-box;
+}
+
+
+/* =========================================================
+   BRAND
+   ========================================================= */
+
+.gnosis-chat__brand {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    margin-bottom: 24px;
+}
+
+.gnosis-chat__brand-mark {
+    width: 38px;
+    height: 38px;
+    display: grid;
+    place-items: center;
+    border-radius: 11px;
+    background: #eaf5fa;
+    color: #659db9;
+}
+
+.gnosis-chat__brand-name {
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.24em;
+    color: #79b5d0;
+}
+
+.gnosis-chat__brand-status {
+    margin-top: 2px;
+    color: var(--gnosis-muted);
+    font-size: 11px;
+}
+
+
+/* =========================================================
+   HEADER
+   ========================================================= */
+
+.gnosis-chat__header {
+    width: 100%;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 24px;
+    padding-bottom: 23px;
+    border-bottom: 1px solid var(--gnosis-border);
+}
+
+.gnosis-chat__header h1 {
+    margin: 0;
+    color: var(--gnosis-text);
+    font-size: 32px;
+    font-weight: 600;
+    letter-spacing: -0.035em;
+}
+
+.gnosis-chat__header p {
+    margin: 7px 0 0;
+    color: var(--gnosis-muted);
+    font-size: 14px;
+}
+
+.gnosis-chat__new-chat {
+    height: 38px;
+    padding: 0 14px;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    border: 1px solid var(--gnosis-border);
+    border-radius: 10px;
+    background: var(--gnosis-panel);
+    color: #c4d0dd;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: 160ms ease;
+}
+
+.gnosis-chat__new-chat:hover:not(:disabled) {
+    background: var(--gnosis-panel-hover);
+    border-color: #3a5876;
+}
+
+.gnosis-chat__new-chat:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+
+/* =========================================================
+   WORKSPACE
+   ========================================================= */
+
+.gnosis-chat__workspace {
+    flex: 1;
+    width: 100%;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 245px;
+    gap: 20px;
+    padding-top: 20px;
+}
+
+
+/* =========================================================
+   CONVERSATION
+   ========================================================= */
+
+.gnosis-chat__conversation {
+    min-width: 0;
+    min-height: 440px;
+    border: 1px solid var(--gnosis-border);
+    border-radius: 17px;
+    background: radial-gradient(circle at 50% 0%, rgba(86, 139, 167, 0.055), transparent 42%), var(--gnosis-bg-soft);
+    overflow: hidden;
+}
+
+
+/* =========================================================
+   WELCOME
+   ========================================================= */
+
+.gnosis-chat__welcome {
+    min-height: 440px;
+    padding: 60px 42px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+.gnosis-chat__welcome-icon {
+    width: 58px;
+    height: 58px;
+    margin-bottom: 22px;
+    display: grid;
+    place-items: center;
+    border-radius: 16px;
+    background: #eaf5fa;
+    color: #639bb7;
+}
+
+.gnosis-chat__welcome h2 {
+    margin: 0;
+    color: var(--gnosis-text);
+    font-size: 28px;
+    font-weight: 600;
+    letter-spacing: -0.025em;
+}
+
+.gnosis-chat__welcome>p {
+    margin: 10px 0 30px;
+    color: var(--gnosis-muted);
+    font-size: 14px;
+}
+
+
+/* =========================================================
+   QUICK ACTIONS
+   ========================================================= */
+
+.gnosis-chat__welcome-grid {
+    width: min(680px, 100%);
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+}
+
+.gnosis-chat__welcome-grid button {
+    min-height: 72px;
+    padding: 15px;
+    display: flex;
+    align-items: center;
+    gap: 13px;
+    border: 1px solid var(--gnosis-border);
+    border-radius: 12px;
+    background: rgba(13, 26, 43, 0.85);
+    color: #83b1c7;
+    text-align: left;
+    cursor: pointer;
+    transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+.gnosis-chat__welcome-grid button:hover {
+    background: var(--gnosis-panel-hover);
+    border-color: #3b5875;
+    transform: translateY(-1px);
+}
+
+.gnosis-chat__welcome-grid span {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.gnosis-chat__welcome-grid strong {
+    color: #dce5ed;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.gnosis-chat__welcome-grid small {
+    color: var(--gnosis-muted);
+    font-size: 11px;
+}
+
+
+/* =========================================================
+   MESSAGES
+   ========================================================= */
+
+.gnosis-chat__messages {
+    padding: 28px 30px 34px;
+    display: flex;
+    flex-direction: column;
+    gap: 34px;
+}
+
+.gnosis-chat__exchange {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+
+/* =========================================================
+   USER MESSAGE
+   ========================================================= */
+
+.gnosis-chat__user-message {
+    display: flex;
+    justify-content: flex-end;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+.gnosis-chat__user-avatar {
+    order: 2;
+    width: 38px;
+    height: 38px;
+    flex: 0 0 38px;
+    display: grid;
+    place-items: center;
+    border-radius: 11px;
+    background: #17283d;
+    color: #dbe6ef;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.gnosis-chat__user-bubble {
+    max-width: min(620px, 78%);
+    padding: 13px 17px;
+    border: 1px solid #cfdae4;
+    border-radius: 16px 5px 16px 16px;
+    background: #edf4f8;
+    color: #23374d;
+}
+
+.gnosis-chat__message-label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.18em;
+}
+
+.gnosis-chat__user-bubble .gnosis-chat__message-label {
+    color: #8498aa;
+}
+
+.gnosis-chat__user-bubble p {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.55;
+}
+
+
+/* =========================================================
+   GNOSIS MESSAGE
+   ========================================================= */
+
+.gnosis-chat__assistant-message {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.gnosis-chat__assistant-avatar {
+    width: 40px;
+    height: 40px;
+    flex: 0 0 40px;
+    display: grid;
+    place-items: center;
+    border-radius: 12px;
+    background: #eaf5fa;
+    color: #619ab6;
+}
+
+.gnosis-chat__assistant-content {
+    min-width: 0;
+    max-width: 900px;
+    padding-top: 3px;
+}
+
+.gnosis-chat__assistant-content .gnosis-chat__message-label {
+    margin-bottom: 9px;
+    color: #83a6bb;
+}
+
+.gnosis-chat__assistant-content>p {
+    margin: 0;
+    color: #d3deea;
+    font-size: 15px;
+    line-height: 1.75;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.gnosis-chat__error {
+    color: #ef9b9b !important;
+}
+
+
+/* =========================================================
+   THINKING
+   ========================================================= */
+
+.gnosis-chat__thinking {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--gnosis-muted);
+    font-size: 13px;
+}
+
+.gnosis-chat__thinking>span {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--gnosis-accent);
+    animation: gnosis-thinking 1.2s infinite ease-in-out;
+}
+
+.gnosis-chat__thinking>span:nth-child(2) {
+    animation-delay: 0.15s;
+}
+
+.gnosis-chat__thinking>span:nth-child(3) {
+    animation-delay: 0.3s;
+}
+
+.gnosis-chat__thinking p {
+    margin: 0 0 0 5px;
+}
+
+@keyframes gnosis-thinking {
+    0%,
+    60%,
+    100% {
+        opacity: 0.25;
+        transform: translateY(0);
+    }
+    30% {
+        opacity: 1;
+        transform: translateY(-2px);
+    }
+}
+
+
+/* =========================================================
+   RESPONSE ACTIONS
+   ========================================================= */
+
+.gnosis-chat__response-actions {
+    margin-top: 13px;
+    display: flex;
+    gap: 6px;
+}
+
+.gnosis-chat__response-actions button {
+    height: 30px;
+    padding: 0 9px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    border: 1px solid var(--gnosis-border-soft);
+    border-radius: 7px;
+    background: transparent;
+    color: #778da4;
+    font-size: 11px;
+    cursor: pointer;
+}
+
+.gnosis-chat__response-actions button:hover {
+    background: var(--gnosis-panel);
+    color: #b7c7d7;
+}
+
+
+/* =========================================================
+   SOURCES
+   ========================================================= */
+
+.gnosis-chat__sources {
+    margin-top: 18px;
+    padding-top: 16px;
+    border-top: 1px solid var(--gnosis-border-soft);
+}
+
+.gnosis-chat__sources-title {
+    margin-bottom: 8px;
+    color: #6f849b;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+}
+
+.gnosis-chat__source {
+    min-height: 35px;
+    padding: 8px 10px;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid var(--gnosis-border-soft);
+    border-radius: 7px;
+    background: rgba(15, 31, 49, 0.7);
+    color: #8fa2b6;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 10px;
+    overflow-wrap: anywhere;
+}
+
+
+/* =========================================================
+   HISTORY
+   ========================================================= */
+
+.gnosis-chat__history {
+    min-width: 0;
+    padding: 17px;
+    border: 1px solid var(--gnosis-border);
+    border-radius: 15px;
+    background: var(--gnosis-bg-soft);
+    align-self: start;
+}
+
+.gnosis-chat__history-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding-bottom: 15px;
+    border-bottom: 1px solid var(--gnosis-border-soft);
+    color: #70849a;
+}
+
+.gnosis-chat__history-header span {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.18em;
+}
+
+.gnosis-chat__history-header h3 {
+    margin: 0;
+    color: #dce5ed;
+    font-size: 15px;
+    font-weight: 600;
+}
+
+.gnosis-chat__history-empty {
+    padding: 22px 4px;
+    color: #62758a;
+    font-size: 11px;
+    line-height: 1.6;
+}
+
+.gnosis-chat__history-list {
+    margin-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.gnosis-chat__history-list button {
+    width: 100%;
+    min-height: 48px;
+    padding: 9px;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: #91a3b5;
+    text-align: left;
+    font-size: 11px;
+    line-height: 1.45;
+    cursor: pointer;
+}
+
+.gnosis-chat__history-list button:hover {
+    background: var(--gnosis-panel);
+    color: #d0dce6;
+}
+
+.gnosis-chat__history-list svg {
+    flex: 0 0 14px;
+    margin-top: 1px;
+}
+
+
+/* =========================================================
+   COMPOSER
+   ========================================================= */
+
+.gnosis-chat__composer {
+    position: relative;
+    width: 100%;
+    margin-top: 18px;
+    padding: 15px 16px 12px;
+    border: 1px solid #314861;
+    border-radius: 16px;
+    background: #0b1829;
+    box-shadow: 0 12px 35px rgba(0, 0, 0, 0.22);
+    transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.gnosis-chat__composer:focus-within {
+    border-color: #446783;
+    box-shadow: 0 0 0 3px rgba(82, 133, 161, 0.08), 0 12px 35px rgba(0, 0, 0, 0.22);
+}
+
+
+/* =========================================================
+   TEXTAREA
+   ========================================================= */
+
+.gnosis-chat__composer textarea {
+    width: 100%;
+    min-height: 48px;
+    max-height: 180px;
+    padding: 7px 5px;
+    resize: vertical;
+    border: 0 !important;
+    outline: 0 !important;
+    background: transparent !important;
+    color: #e7edf3 !important;
+    font-family: inherit;
+    font-size: 14px;
+    line-height: 1.55;
+    box-shadow: none !important;
+}
+
+.gnosis-chat__composer textarea::placeholder {
+    color: #62758a;
+    opacity: 1;
+}
+
+
+/* =========================================================
+   COMPOSER BOTTOM
+   ========================================================= */
+
+.gnosis-chat__composer-bottom {
+    min-height: 38px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 15px;
+}
+
+.gnosis-chat__composer-info {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    color: #71869c;
+    font-size: 10px;
+}
+
+.gnosis-chat__composer-info svg {
+    color: #71a8bd;
+}
+
+.gnosis-chat__counter {
+    margin-left: 7px;
+    color: #536a82;
+}
+
+
+/* =========================================================
+   SEND BUTTON
+   ========================================================= */
+
+.gnosis-chat__send {
+    width: 40px;
+    height: 40px;
+    flex: 0 0 40px;
+    display: grid;
+    place-items: center;
+    border: 0 !important;
+    border-radius: 11px;
+    background: #edf4f8 !important;
+    color: #172a40 !important;
+    cursor: pointer;
+    transition: transform 150ms ease, background 150ms ease, opacity 150ms ease;
+}
+
+.gnosis-chat__send:hover:not(:disabled) {
+    transform: translateY(-1px);
+    background: #ffffff !important;
+}
+
+.gnosis-chat__send:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+.gnosis-chat__send:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+
+/* =========================================================
+   VALIDATION
+   ========================================================= */
+
+.gnosis-chat__validation {
+    padding: 7px 4px 0;
+    color: #d98282;
+    font-size: 11px;
+}
+
+
+/* =========================================================
+   FOOTER
+   ========================================================= */
+
+.gnosis-chat__footer {
+    margin: 10px 0 0;
+    color: #53677d;
+    font-size: 10px;
+    text-align: center;
+}
+
+
+/* =========================================================
+   RESPONSIVE
+   ========================================================= */
+
+@media (max-width: 1100px) {
+    .gnosis-chat {
+        padding: 28px 24px;
+    }
+    .gnosis-chat__workspace {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .gnosis-chat__history {
+        display: none;
+    }
+}
+
+@media (max-width: 700px) {
+    .gnosis-chat {
+        padding: 22px 14px;
+    }
+    .gnosis-chat__header {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+    .gnosis-chat__header h1 {
+        font-size: 27px;
+    }
+    .gnosis-chat__new-chat {
+        width: 100%;
+        justify-content: center;
+    }
+    .gnosis-chat__welcome {
+        padding: 45px 18px;
+    }
+    .gnosis-chat__welcome h2 {
+        font-size: 24px;
+    }
+    .gnosis-chat__welcome-grid {
+        grid-template-columns: 1fr;
+    }
+    .gnosis-chat__messages {
+        padding: 20px 16px;
+    }
+    .gnosis-chat__user-bubble {
+        max-width: 85%;
+    }
+    .gnosis-chat__assistant-content {
+        max-width: calc(100% - 52px);
+    }
+}
+
+@media (max-width: 480px) {
+    .gnosis-chat {
+        padding: 18px 10px;
+    }
+    .gnosis-chat__brand {
+        margin-bottom: 18px;
+    }
+    .gnosis-chat__brand-status {
+        display: none;
+    }
+    .gnosis-chat__header p {
+        line-height: 1.5;
+    }
+    .gnosis-chat__conversation {
+        min-height: 400px;
+        border-radius: 13px;
+    }
+    .gnosis-chat__composer {
+        border-radius: 13px;
+    }
+    .gnosis-chat__composer-info span:first-of-type {
+        display: none;
+    }
+    .gnosis-chat__user-bubble {
+        max-width: 80%;
+    }
+}

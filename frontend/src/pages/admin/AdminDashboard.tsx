@@ -1,17 +1,14 @@
 import {
   Activity,
-  AlertTriangle,
   ArrowDownRight,
   ArrowUpRight,
   CheckCircle2,
   Clock3,
-  Database,
   HelpCircle,
   MessageSquare,
   ShieldAlert,
   ShieldCheck,
   Users,
-  XCircle,
 } from 'lucide-react';
 
 import './AdminDashboard.css';

@@ -12,7 +12,8 @@ import { EmployeeHome } from '../pages/employee/EmployeeHome';
 import { AskGnosis } from '../pages/employee/AskGnosis';
 
 import { AdminDashboard } from '../pages/admin/AdminDashboard';
-
+import { AccessRequests as EmployeeAccessRequests } from '../pages/employee/AccessRequests';
+import { AccessRequests as AdminAccessRequests } from '../pages/admin/AccessRequests';
 
 /* =========================================================
    ROOT REDIRECT
@@ -146,6 +147,10 @@ export function AppRoutes() {
             index
             element={<EmployeeHome />}
           />
+          <Route
+  path="access-requests"
+  element={<EmployeeAccessRequests />}
+/>
 
 
           {/* Legacy employee/ask URL */}
@@ -184,6 +189,10 @@ export function AppRoutes() {
             index
             element={<AdminDashboard />}
           />
+          <Route
+  path="access-requests"
+  element={<AdminAccessRequests />}
+/>
 
         </Route>
 

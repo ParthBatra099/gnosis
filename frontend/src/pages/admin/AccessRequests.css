@@ -1,0 +1,478 @@
+/* =========================================================
+   GNOSIS — ADMIN ACCESS REQUESTS
+   ========================================================= */
+
+.admin-access-requests {
+    width: 100%;
+    min-height: 100%;
+    padding: 32px;
+    box-sizing: border-box;
+}
+
+
+/* =========================================================
+   HEADER
+   ========================================================= */
+
+.admin-access-requests__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 24px;
+    margin-bottom: 28px;
+}
+
+.admin-access-requests__heading {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+}
+
+.admin-access-requests__icon {
+    width: 46px;
+    height: 46px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 12px;
+    background: #f5f5f2;
+    color: #171513;
+}
+
+.admin-access-requests__heading h1 {
+    margin: 0;
+    font-size: 28px;
+    line-height: 1.2;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: #171513;
+}
+
+.admin-access-requests__heading p {
+    margin: 7px 0 0;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #77736d;
+}
+
+
+/* =========================================================
+   REFRESH BUTTON
+   ========================================================= */
+
+.admin-access-requests__refresh {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 40px;
+    padding: 0 15px;
+    border: 1px solid #d8d4cd;
+    border-radius: 9px;
+    background: #ffffff;
+    color: #34312d;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+}
+
+.admin-access-requests__refresh:hover {
+    background: #f7f6f3;
+    border-color: #bdb8b0;
+}
+
+.admin-access-requests__refresh:active {
+    transform: translateY(1px);
+}
+
+.admin-access-requests__refresh:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+
+/* =========================================================
+   SUMMARY
+   ========================================================= */
+
+.admin-access-requests__summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+    margin-bottom: 28px;
+}
+
+.admin-access-requests__summary-card {
+    min-height: 105px;
+    padding: 20px;
+    box-sizing: border-box;
+    border: 1px solid #e1ded8;
+    border-radius: 14px;
+    background: #ffffff;
+}
+
+.admin-access-requests__summary-label {
+    display: block;
+    margin-bottom: 9px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #8a857d;
+}
+
+.admin-access-requests__summary-value {
+    display: block;
+    font-size: 30px;
+    line-height: 1;
+    font-weight: 700;
+    color: #171513;
+}
+
+
+/* =========================================================
+   CONTENT
+   ========================================================= */
+
+.admin-access-requests__content {
+    width: 100%;
+}
+
+.admin-access-requests__section-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+}
+
+.admin-access-requests__section-title h2 {
+    margin: 0;
+    font-size: 17px;
+    font-weight: 700;
+    color: #171513;
+}
+
+
+/* =========================================================
+   REQUEST LIST
+   ========================================================= */
+
+.admin-access-requests__list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+
+/* =========================================================
+   REQUEST CARD
+   ========================================================= */
+
+.admin-access-request {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    padding: 20px 22px;
+    border: 1px solid #e2dfd9;
+    border-radius: 14px;
+    background: #ffffff;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.admin-access-request:hover {
+    border-color: #cbc6be;
+    box-shadow: 0 6px 24px rgba(23, 21, 19, 0.05);
+    transform: translateY(-1px);
+}
+
+
+/* =========================================================
+   REQUEST INFORMATION
+   ========================================================= */
+
+.admin-access-request__info {
+    min-width: 0;
+    flex: 1;
+}
+
+.admin-access-request__resource {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 7px;
+    font-size: 16px;
+    font-weight: 700;
+    color: #171513;
+}
+
+.admin-access-request__resource svg {
+    flex-shrink: 0;
+}
+
+.admin-access-request__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 7px;
+    font-size: 13px;
+    color: #77736d;
+}
+
+.admin-access-request__meta-separator {
+    color: #c1bdb5;
+}
+
+.admin-access-request__reason {
+    margin-top: 12px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: #f7f6f3;
+    font-size: 13px;
+    line-height: 1.5;
+    color: #57534e;
+}
+
+
+/* =========================================================
+   PERMISSION / STATUS BADGES
+   ========================================================= */
+
+.admin-access-request__badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin-top: 12px;
+}
+
+.admin-access-request__badge {
+    display: inline-flex;
+    align-items: center;
+    min-height: 26px;
+    padding: 0 9px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+
+.admin-access-request__badge--permission {
+    background: #f0efec;
+    color: #4f4b45;
+}
+
+.admin-access-request__badge--pending {
+    background: #fff5dc;
+    color: #86651b;
+}
+
+
+/* =========================================================
+   ACTIONS
+   ========================================================= */
+
+.admin-access-request__actions {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    flex-shrink: 0;
+}
+
+.admin-access-request__button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    min-height: 38px;
+    padding: 0 14px;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.18s ease, border-color 0.18s ease, transform 0.18s ease, opacity 0.18s ease;
+}
+
+.admin-access-request__button:active {
+    transform: translateY(1px);
+}
+
+.admin-access-request__button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+
+/* APPROVE */
+
+.admin-access-request__button--approve {
+    border: 1px solid #b9cbbd;
+    background: #f1f7f2;
+    color: #315b3b;
+}
+
+.admin-access-request__button--approve:hover {
+    background: #e5f0e7;
+    border-color: #91af98;
+}
+
+
+/* REJECT */
+
+.admin-access-request__button--reject {
+    border: 1px solid #d8bcbc;
+    background: #faf2f2;
+    color: #733e3e;
+}
+
+.admin-access-request__button--reject:hover {
+    background: #f5e6e6;
+    border-color: #c89d9d;
+}
+
+
+/* =========================================================
+   EMPTY STATE
+   ========================================================= */
+
+.admin-access-requests__empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 300px;
+    padding: 40px;
+    border: 1px dashed #d8d4cd;
+    border-radius: 14px;
+    background: #faf9f7;
+    text-align: center;
+}
+
+.admin-access-requests__empty-icon {
+    width: 52px;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 15px;
+    border-radius: 50%;
+    background: #efefeb;
+    color: #77736d;
+}
+
+.admin-access-requests__empty h3 {
+    margin: 0 0 7px;
+    font-size: 16px;
+    font-weight: 700;
+    color: #34312d;
+}
+
+.admin-access-requests__empty p {
+    max-width: 420px;
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: #858078;
+}
+
+
+/* =========================================================
+   LOADING
+   ========================================================= */
+
+.admin-access-requests__loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    min-height: 300px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #77736d;
+}
+
+.admin-access-requests__spinner {
+    width: 17px;
+    height: 17px;
+    border: 2px solid #dedbd5;
+    border-top-color: #171513;
+    border-radius: 50%;
+    animation: admin-access-request-spin 0.8s linear infinite;
+}
+
+@keyframes admin-access-request-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+
+/* =========================================================
+   ERROR
+   ========================================================= */
+
+.admin-access-requests__error {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 13px 15px;
+    margin-bottom: 20px;
+    border: 1px solid #e0bebe;
+    border-radius: 9px;
+    background: #fcf3f3;
+    color: #713d3d;
+    font-size: 13px;
+}
+
+
+/* =========================================================
+   RESPONSIVE
+   ========================================================= */
+
+@media (max-width: 900px) {
+    .admin-access-requests {
+        padding: 24px;
+    }
+    .admin-access-requests__summary {
+        grid-template-columns: 1fr;
+    }
+    .admin-access-request {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+    .admin-access-request__actions {
+        width: 100%;
+    }
+    .admin-access-request__button {
+        flex: 1;
+    }
+}
+
+@media (max-width: 600px) {
+    .admin-access-requests {
+        padding: 18px;
+    }
+    .admin-access-requests__header {
+        flex-direction: column;
+    }
+    .admin-access-requests__heading h1 {
+        font-size: 23px;
+    }
+    .admin-access-requests__refresh {
+        width: 100%;
+    }
+    .admin-access-request {
+        padding: 17px;
+    }
+    .admin-access-request__actions {
+        flex-direction: column;
+    }
+    .admin-access-request__button {
+        width: 100%;
+    }
+}

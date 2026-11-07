@@ -54,6 +54,16 @@ def _verify_security_event_access(sec_event: SecurityEvent, current_user: User, 
     return False
 
 
+def _verify_incident_mutation(incident: Incident, current_user: User, db: Session) -> bool:
+    """Reporter status permits viewing, not investigation or reassignment."""
+    if incident.assigned_to_id == current_user.id:
+        return True
+    if incident.resource_id:
+        resource = db.query(Resource).filter(Resource.id == incident.resource_id).first()
+        return resource is not None and resource.owner_id == current_user.id
+    return False
+
+
 def _verify_assignee(assignee_id: str | None, db: Session) -> None:
     """Validates that assigned_to_id belongs to an active user."""
     if assignee_id is not None:
@@ -110,6 +120,15 @@ def create_incident(
 
     _verify_assignee(payload.assigned_to_id, db)
 
+    # Validate every link before persisting any part of the new incident.
+    event_ids = list(dict.fromkeys(payload.security_event_ids or []))
+    for sec_id in event_ids:
+        sec_event = db.query(SecurityEvent).filter(SecurityEvent.id == sec_id).first()
+        if not sec_event:
+            raise HTTPException(status_code=404, detail=f"SecurityEvent '{sec_id}' not found")
+        if not _verify_security_event_access(sec_event, current_user, db):
+            raise HTTPException(status_code=403, detail=f"Unauthorized to attach SecurityEvent '{sec_id}'")
+
     incident = Incident(
         title=payload.title,
         description=payload.description,
@@ -120,36 +139,15 @@ def create_incident(
         resource_id=payload.resource_id,
     )
     db.add(incident)
-    db.commit()
-    db.refresh(incident)
-
-    # Attach optionally supplied security events
-    if payload.security_event_ids:
-        for sec_id in payload.security_event_ids:
-            sec_event = db.query(SecurityEvent).filter(SecurityEvent.id == sec_id).first()
-            if not sec_event:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"SecurityEvent '{sec_id}' not found",
-                )
-            if not _verify_security_event_access(sec_event, current_user, db):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail=f"Unauthorized to attach SecurityEvent '{sec_id}'",
-                )
-
-            link_exists = (
-                db.query(IncidentEvent)
-                .filter(
-                    IncidentEvent.incident_id == incident.id,
-                    IncidentEvent.security_event_id == sec_id,
-                )
-                .first()
-            )
-            if not link_exists:
-                db.add(IncidentEvent(incident_id=incident.id, security_event_id=sec_id))
+    try:
+        db.flush()
+        for sec_id in event_ids:
+            db.add(IncidentEvent(incident_id=incident.id, security_event_id=sec_id))
         db.commit()
-        db.refresh(incident)
+    except Exception:
+        db.rollback()
+        raise
+    db.refresh(incident)
 
     record_audit_event(
         db=db,
@@ -186,7 +184,10 @@ def get_incident_detail(
     )
 
     detail = IncidentDetailRead.model_validate(incident)
-    detail.security_events = [SecurityEventRead.model_validate(e) for e in linked_events]
+    detail.security_events = [
+        SecurityEventRead.model_validate(e) for e in linked_events
+        if _verify_security_event_access(e, current_user, db)
+    ]
     return detail
 
 
@@ -199,7 +200,7 @@ def update_incident(
 ) -> IncidentRead:
     """Update incident status, assignee, or resolution notes enforcing status progression."""
     incident = db.query(Incident).filter(Incident.id == incident_id).first()
-    if not incident or not _verify_incident_access(incident, current_user, db):
+    if not incident or not _verify_incident_mutation(incident, current_user, db):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Incident not found or access unauthorized",
@@ -255,7 +256,7 @@ def attach_security_events_to_incident(
 ) -> IncidentDetailRead:
     """Attach security events to an existing incident avoiding duplicate linkages."""
     incident = db.query(Incident).filter(Incident.id == incident_id).first()
-    if not incident or not _verify_incident_access(incident, current_user, db):
+    if not incident or not _verify_incident_mutation(incident, current_user, db):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Incident not found or access unauthorized",

@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -7,10 +9,43 @@ from sqlalchemy.pool import StaticPool
 from app.core.database import Base, get_db
 from app.core.security import create_access_token, hash_password
 from app.main import app
+from app.models.access_grant import AccessGrant
 from app.models.access_request import AccessRequest
 from app.models.department import Department
 from app.models.resource import Resource
 from app.models.user import User
+
+
+@pytest.mark.parametrize("state,expected", [
+    ("non_expiring", 400), ("future", 400), ("expired", 201),
+    ("revoked", 201), ("exact_expiry", 201), ("mixed", 400),
+])
+def test_request_checks_only_active_grants(client, db_session, state, expected):
+    user = db_session.query(User).filter_by(email="eng_emp@gnosis.com").one()
+    resource = db_session.query(Resource).filter_by(name="HR Payroll File").one()
+    now = datetime(2030, 1, 1, tzinfo=timezone.utc)
+    grant = AccessGrant(user_id=user.id, resource_id=resource.id, permission="read")
+    if state in {"expired", "mixed"}:
+        grant.expires_at = now - timedelta(seconds=1)
+    elif state == "future":
+        grant.expires_at = now + timedelta(days=1)
+    elif state == "exact_expiry":
+        grant.expires_at = now
+    elif state == "revoked":
+        grant.revoked_at = now - timedelta(seconds=1)
+    db_session.add(grant)
+    if state == "mixed":
+        db_session.add(AccessGrant(user_id=user.id, resource_id=resource.id, permission="read"))
+    db_session.commit()
+    original_grant_id = grant.id
+    token = create_access_token(subject=user.id)
+    with patch("app.api.v1.access.datetime", wraps=datetime) as clock:
+        clock.now.return_value = now
+        response = client.post("/access/requests", json={
+            "resource_id": resource.id, "permission": "read", "reason": "Renew access",
+        }, headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == expected
+    assert db_session.get(AccessGrant, original_grant_id) is not None
 
 
 @pytest.fixture
@@ -105,9 +140,23 @@ def test_create_access_request_success(client, db_session):
 
 
 def test_create_access_request_already_authorized(client, db_session):
+    """
+    An explicit active AccessGrant blocks duplicate request creation.
+    Policy-based ALLOW does not block requests, but an explicit grant does.
+    """
     hr_user = db_session.query(User).filter_by(email="hr_emp@gnosis.com").first()
     res = db_session.query(Resource).filter_by(name="HR Payroll File").first()
     token = create_access_token(subject=hr_user.id)
+
+    # Seed explicit grant
+    grant = AccessGrant(
+        user_id=hr_user.id,
+        resource_id=res.id,
+        permission="read",
+        granted_by=hr_user.id,
+    )
+    db_session.add(grant)
+    db_session.commit()
 
     response = client.post(
         "/access/requests",
@@ -119,7 +168,7 @@ def test_create_access_request_already_authorized(client, db_session):
         headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 400
-    assert response.json()["detail"] == "Access already granted by security policy"
+    assert response.json()["detail"] == "Access already granted for this resource and permission"
 
 
 def test_create_access_request_duplicate_pending(client, db_session):

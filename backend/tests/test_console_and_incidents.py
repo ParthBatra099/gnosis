@@ -1,4 +1,5 @@
 import pytest
+from sqlalchemy import event
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -13,6 +14,138 @@ from app.models.incident_event import IncidentEvent
 from app.models.resource import Resource
 from app.models.security_event import SecurityEvent
 from app.models.user import User
+from app.models.audit_event import AuditEvent
+
+
+@pytest.mark.parametrize("payload", [
+    {"status": "INVESTIGATING"}, {"status": "RESOLVED", "resolution_notes": "Self cleared"},
+    {"status": "CLOSED"}, {"resolution_notes": "Self cleared"}, {"assigned_to_id": "self"},
+])
+def test_automatic_reporter_cannot_mutate_incident(client, db_session, payload):
+    user = db_session.query(User).filter_by(email="eng_req@gnosis.com").one()
+    resource = db_session.query(Resource).filter_by(name="Master Keys").one()
+    headers = {"Authorization": f"Bearer {create_access_token(subject=user.id)}"}
+    assert client.get(f"/resources/{resource.id}", headers=headers).status_code == 403
+    incident = db_session.query(Incident).filter_by(resource_id=resource.id).one()
+    assert incident.reporter_id == user.id
+    if payload.get("assigned_to_id") == "self":
+        payload = {"assigned_to_id": user.id}
+    response = client.patch(f"/console/incidents/{incident.id}", json=payload, headers=headers)
+    assert response.status_code == 404
+    assert client.post(f"/console/incidents/{incident.id}/events",
+                       json={"security_event_ids": []}, headers=headers).status_code == 404
+    db_session.refresh(incident)
+    assert incident.status == "OPEN"
+    assert incident.assigned_to_id is None
+    assert incident.resolution_notes is None
+    assert client.get(f"/console/incidents/{incident.id}", headers=headers).status_code == 200
+
+
+def test_explicit_assignee_can_update_incident(client, db_session):
+    user = db_session.query(User).filter_by(email="eng_req@gnosis.com").one()
+    resource = db_session.query(Resource).filter_by(name="HR Payroll Data").one()
+    incident = Incident(title="Assigned", description="Test", severity="LOW",
+                        resource_id=resource.id, assigned_to_id=user.id)
+    db_session.add(incident)
+    db_session.commit()
+    headers = {"Authorization": f"Bearer {create_access_token(subject=user.id)}"}
+    response = client.patch(f"/console/incidents/{incident.id}",
+                            json={"status": "INVESTIGATING"}, headers=headers)
+    assert response.status_code == 200
+
+
+def test_incident_detail_filters_each_linked_event(client, db_session):
+    user = db_session.query(User).filter_by(email="eng_req@gnosis.com").one()
+    owner = db_session.query(User).filter_by(email="hr_owner@gnosis.com").one()
+    resource = db_session.query(Resource).filter_by(name="HR Payroll Data").one()
+    incident = Incident(title="Shared", description="Test", severity="HIGH",
+                        resource_id=resource.id, reporter_id=user.id)
+    visible = SecurityEvent(event_type="TEST", severity="LOW", actor_id=user.id,
+                            resource_id=resource.id, description="Own evidence")
+    hidden = SecurityEvent(event_type="TEST", severity="LOW", actor_id=owner.id,
+                           resource_id=resource.id, description="Another actor's evidence")
+    db_session.add_all([incident, visible, hidden])
+    db_session.flush()
+    db_session.add_all([IncidentEvent(incident_id=incident.id, security_event_id=e.id)
+                        for e in (visible, hidden)])
+    db_session.commit()
+    for principal, expected in [(user, {visible.id}), (owner, {visible.id, hidden.id})]:
+        headers = {"Authorization": f"Bearer {create_access_token(subject=principal.id)}"}
+        response = client.get(f"/console/incidents/{incident.id}", headers=headers)
+        assert response.status_code == 200
+        assert {e["id"] for e in response.json()["security_events"]} == expected
+    assert db_session.query(IncidentEvent).count() == 2
+
+
+@pytest.mark.parametrize("invalid", ["missing", "unauthorized"])
+def test_invalid_create_evidence_leaves_no_partial_incident(client, db_session, invalid):
+    owner = db_session.query(User).filter_by(email="hr_owner@gnosis.com").one()
+    other = db_session.query(User).filter_by(email="eng_req@gnosis.com").one()
+    resource = db_session.query(Resource).filter_by(name="HR Payroll Data").one()
+    valid = SecurityEvent(event_type="TEST", severity="LOW", resource_id=resource.id,
+                          description="Valid")
+    hidden = SecurityEvent(event_type="TEST", severity="LOW", actor_id=other.id,
+                           description="Not authorized")
+    db_session.add_all([valid, hidden])
+    db_session.commit()
+    before = (db_session.query(Incident).count(), db_session.query(IncidentEvent).count())
+    headers = {"Authorization": f"Bearer {create_access_token(subject=owner.id)}"}
+    response = client.post("/console/incidents", headers=headers, json={
+        "title": "Must not persist", "description": "Test", "severity": "LOW",
+        "resource_id": resource.id,
+        "security_event_ids": [valid.id, "missing-id" if invalid == "missing" else hidden.id],
+    })
+    assert response.status_code == (404 if invalid == "missing" else 403)
+    assert (db_session.query(Incident).count(), db_session.query(IncidentEvent).count()) == before
+
+
+def test_create_incident_commits_unique_links_and_audit(client, db_session):
+    owner = db_session.query(User).filter_by(email="hr_owner@gnosis.com").one()
+    resource = db_session.query(Resource).filter_by(name="HR Payroll Data").one()
+    evidence = SecurityEvent(event_type="TEST", severity="LOW", resource_id=resource.id,
+                             description="Retained evidence")
+    db_session.add(evidence)
+    db_session.commit()
+    headers = {"Authorization": f"Bearer {create_access_token(subject=owner.id)}"}
+    response = client.post("/console/incidents", headers=headers, json={
+        "title": "Valid", "description": "Test", "severity": "LOW",
+        "resource_id": resource.id, "security_event_ids": [evidence.id, evidence.id],
+    })
+    assert response.status_code == 201
+    assert db_session.query(IncidentEvent).count() == 1
+    audit = db_session.query(AuditEvent).filter_by(action="INCIDENT_CREATED").one()
+    assert audit.context_data["incident_id"] == response.json()["id"]
+    assert db_session.get(SecurityEvent, evidence.id) is not None
+
+
+def test_link_persistence_failure_rolls_back_new_incident(client, db_session):
+    owner = db_session.query(User).filter_by(email="hr_owner@gnosis.com").one()
+    resource = db_session.query(Resource).filter_by(name="HR Payroll Data").one()
+    evidence = SecurityEvent(event_type="TEST", severity="LOW", resource_id=resource.id,
+                             description="Retained evidence")
+    db_session.add(evidence)
+    db_session.commit()
+    evidence_id = evidence.id
+    attempts = []
+
+    def fail_link(mapper, connection, link):
+        attempts.append(link.security_event_id)
+        raise RuntimeError("Simulated link persistence failure")
+
+    event.listen(IncidentEvent, "before_insert", fail_link)
+    try:
+        with pytest.raises(RuntimeError, match="link persistence failure"):
+            client.post("/console/incidents", json={
+                "title": "Atomic", "description": "Test", "severity": "LOW",
+                "resource_id": resource.id, "security_event_ids": [evidence_id],
+            }, headers={"Authorization": f"Bearer {create_access_token(subject=owner.id)}"})
+    finally:
+        event.remove(IncidentEvent, "before_insert", fail_link)
+    assert attempts == [evidence_id]
+    assert db_session.is_active
+    assert db_session.query(Incident).count() == 0
+    assert db_session.query(IncidentEvent).count() == 0
+    assert db_session.get(SecurityEvent, evidence_id) is not None
 
 
 @pytest.fixture

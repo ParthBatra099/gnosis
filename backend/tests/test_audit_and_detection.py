@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -10,6 +10,7 @@ from app.core.database import Base, get_db
 from app.core.security import create_access_token, hash_password
 from app.main import app
 from app.models.department import Department
+from app.models.audit_event import AuditEvent
 from app.models.resource import Resource
 from app.models.user import User
 
@@ -227,13 +228,25 @@ def test_detection_after_hours_access(client, db_session):
     assert any(e["event_type"] == "AFTER_HOURS_ACCESS" and e["severity"] == "LOW" for e in sec_events)
 
 
-def test_audit_failure_does_not_break_authorization(client, db_session):
-    user = db_session.query(User).filter_by(email="hr_owner@gnosis.com").first()
+@pytest.mark.parametrize("email,expected", [("hr_owner@gnosis.com", 200), ("eng_req@gnosis.com", 403)])
+def test_audit_failure_does_not_break_authorization(client, db_session, caplog, email, expected):
+    user = db_session.query(User).filter_by(email=email).first()
     res = db_session.query(Resource).filter_by(name="HR Payroll Data").first()
     token = create_access_token(subject=user.id)
 
-    with patch("app.services.audit_service.record_audit_event", side_effect=Exception("Database connection loss")):
+    attempts = []
+
+    def fail_audit_insert(mapper, connection, audit):
+        attempts.append(audit.outcome)
+        raise RuntimeError("Simulated audit persistence failure")
+
+    event.listen(AuditEvent, "before_insert", fail_audit_insert)
+    try:
         resp = client.get(f"/resources/{res.id}", headers={"Authorization": f"Bearer {token}"})
-        # Authorization decision MUST remain ALLOW (200) despite audit failure
-        assert resp.status_code == 200
-        assert resp.json()["id"] == res.id
+    finally:
+        event.remove(AuditEvent, "before_insert", fail_audit_insert)
+    assert resp.status_code == expected
+    assert attempts == ["ALLOW" if expected == 200 else "DENY"]
+    assert "Failed to record audit event" in caplog.text
+    assert db_session.query(AuditEvent).count() == 0
+    assert db_session.is_active

@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 import re
 from typing import List
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.models.user import User
@@ -63,7 +65,34 @@ class AssistantService:
         Strictly enforces authorization via evaluate_access without side-effect audit pollution.
         """
         q = query.strip().lower()
-
+                # Help intent
+        if q in {"help", "what can you do", "what can i ask"}:
+            return AssistantQueryResult(
+                answer=(
+                    "Welcome to Ask GNOSIS.\n\n"
+                    "GNOSIS is an organization security and access-management "
+                    "platform designed to help employees securely access company "
+                    "resources while allowing administrators to manage permissions, "
+                    "monitor activity, detect suspicious access, and investigate "
+                    "security events.\n\n"
+                    "You can ask GNOSIS about:\n"
+                    "• Resources you can access\n"
+                    "• Your access requests\n"
+                    "• Your active access grants\n"
+                    "• Your profile and role\n"
+                    "• Information about resources available to you\n\n"
+                    "Try asking:\n"
+                    "• What resources can I access?\n"
+                    "• Show my access requests\n"
+                    "• What access grants do I have?\n"
+                    "• What is my role?\n"
+                    "• Tell me about the Employee Handbook\n\n"
+                    "GNOSIS only provides information that you are authorized "
+                    "to access."
+                ),
+                sources=[],
+                access_denied=False,
+            )
         # Specific Resource Query (e.g., "Can I access Project Titan?", "Tell me about Financial Report")
         specific_resource_match = re.search(
             r"\b(?:about|access|view|show|read|get)\s+([a-zA-Z0-9_\-\s]+)", q
@@ -211,7 +240,14 @@ class AssistantService:
     def _handle_access_grants_query(db: Session, user: User) -> AssistantQueryResult:
         grants = (
             db.query(AccessGrant)
-            .filter(AccessGrant.user_id == user.id)
+            .filter(
+                AccessGrant.user_id == user.id,
+                AccessGrant.revoked_at.is_(None),
+                or_(
+                    AccessGrant.expires_at.is_(None),
+                    AccessGrant.expires_at > datetime.now(timezone.utc),
+                ),
+            )
             .order_by(AccessGrant.granted_at.desc())
             .all()
         )

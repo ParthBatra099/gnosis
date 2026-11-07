@@ -1,5 +1,8 @@
 from datetime import datetime, timezone
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -10,10 +13,33 @@ from app.models.resource import Resource
 from app.models.user import User
 from app.schemas.access_grant import AccessGrantRead, GrantApproveRequest
 from app.schemas.access_request import AccessRequestCreate, AccessRequestRead
-from app.security.access_decision import SUPPORTED_PERMISSIONS, evaluate_access
+from app.security.access_decision import SUPPORTED_PERMISSIONS
 from app.services.audit_service import record_audit_event
 
 router = APIRouter()
+
+
+class ResourceMetadataResponse(BaseModel):
+    id: str
+    name: str
+    description: Optional[str] = None
+    department_id: Optional[str] = None
+    sensitivity: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+@router.get("/resources/metadata", response_model=List[ResourceMetadataResponse])
+def get_resource_metadata_list(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> List[ResourceMetadataResponse]:
+    """
+    Returns high-level metadata for available resources to populate selection UI.
+    Does NOT attempt resource access evaluations or log RESOURCE_ACCESS audit events.
+    """
+    return db.query(Resource).all()
 
 
 @router.post(
@@ -46,20 +72,25 @@ def create_access_request(
             AccessGrant.user_id == current_user.id,
             AccessGrant.resource_id == payload.resource_id,
             AccessGrant.permission == payload.permission,
+            AccessGrant.revoked_at.is_(None),
+            or_(
+                AccessGrant.expires_at.is_(None),
+                AccessGrant.expires_at > datetime.now(timezone.utc),
+            ),
         )
         .all()
     )
 
-    decision = evaluate_access(
-        user=current_user,
-        resource=resource,
-        requested_permission=payload.permission,
-        active_grants=active_grants,
-    )
-    if decision.allowed:
+    # An access request is a governance workflow, not an authorization check.
+    # If the user already has an explicit active grant for the exact
+    # resource + permission, do not create a duplicate request.
+    # Policy-based ALLOW/DENY is intentionally NOT used here.
+    # The authorization engine remains the source of truth when the
+    # resource is actually accessed.
+    if active_grants:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Access already granted by security policy",
+            detail="Access already granted for this resource and permission",
         )
 
     existing_pending = (
@@ -120,13 +151,19 @@ def get_pending_approvals_for_owner(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> list[AccessRequestRead]:
-    return (
+    query = (
         db.query(AccessRequest)
         .join(Resource, AccessRequest.resource_id == Resource.id)
-        .filter(
-            Resource.owner_id == current_user.id,
-            AccessRequest.status == "PENDING",
-        )
+        .filter(AccessRequest.status == "PENDING")
+    )
+
+    # ADMIN can review all pending requests.
+    if current_user.role == "ADMIN":
+        return query.order_by(AccessRequest.created_at.desc()).all()
+
+    # Non-admin users retain the existing resource-owner behavior.
+    return (
+        query.filter(Resource.owner_id == current_user.id)
         .order_by(AccessRequest.created_at.desc())
         .all()
     )
@@ -147,10 +184,15 @@ def approve_access_request(
         )
 
     resource = db.query(Resource).filter(Resource.id == access_req.resource_id).first()
-    if not resource or resource.owner_id != current_user.id:
+    if not resource:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Resource not found",
+        )
+    if current_user.role != "ADMIN" and resource.owner_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only the resource owner can approve access requests for this resource",
+            detail="Only an administrator or resource owner can approve access requests",
         )
 
     if access_req.status != "PENDING":
@@ -191,7 +233,11 @@ def approve_access_request(
         outcome="ALLOW",
         actor_id=current_user.id,
         resource_id=resource.id,
-        reason="OWNER_APPROVED",
+        reason=(
+            "ADMIN_APPROVED"
+            if current_user.role == "ADMIN"
+            else "OWNER_APPROVED"
+        ),
         context_data={"grant_id": grant.id, "request_id": access_req.id},
     )
 
@@ -212,10 +258,15 @@ def reject_access_request(
         )
 
     resource = db.query(Resource).filter(Resource.id == access_req.resource_id).first()
-    if not resource or resource.owner_id != current_user.id:
+    if not resource:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Resource not found",
+        )
+    if current_user.role != "ADMIN" and resource.owner_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only the resource owner can reject access requests for this resource",
+            detail="Only an administrator or resource owner can reject access requests",
         )
 
     if access_req.status != "PENDING":
@@ -234,7 +285,11 @@ def reject_access_request(
         outcome="ALLOW",
         actor_id=current_user.id,
         resource_id=resource.id,
-        reason="OWNER_REJECTED",
+        reason=(
+            "ADMIN_REJECTED"
+            if current_user.role == "ADMIN"
+            else "OWNER_REJECTED"
+        ),
         context_data={"request_id": access_req.id},
     )
 

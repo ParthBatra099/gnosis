@@ -1,6 +1,11 @@
 import uuid
+from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
 import pytest
-from app.core.database import SessionLocal
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+from app.core.database import Base
 from app.models.department import Department
 from app.models.resource import Resource
 from app.models.user import User
@@ -10,18 +15,43 @@ from app.services.assistant_service import AssistantService
 from app.core.security import hash_password
 
 
+@pytest.mark.parametrize("state,active", [
+    ("non_expiring", True), ("future", True), ("expired", False),
+    ("revoked", False), ("exact_expiry", False),
+])
+def test_assistant_reports_only_active_grants(setup_assistant_data, state, active):
+    data = setup_assistant_data
+    session, user = data["session"], data["user"]
+    grant = session.query(AccessGrant).filter_by(user_id=user.id).one()
+    now = datetime(2030, 1, 1, tzinfo=timezone.utc)
+    if state == "future":
+        grant.expires_at = now + timedelta(days=1)
+    elif state == "expired":
+        grant.expires_at = now - timedelta(seconds=1)
+    elif state == "exact_expiry":
+        grant.expires_at = now
+    elif state == "revoked":
+        grant.revoked_at = now
+    session.commit()
+    grant_id = grant.id
+    with patch("app.services.assistant_service.datetime", wraps=datetime, create=True) as clock:
+        clock.now.return_value = now
+        result = AssistantService.process_query(session, user, "Show my active access grants")
+    assert (f"AccessGrant:{grant_id}" in result.sources) is active
+    assert (data["public_res_name"] in result.answer) is active
+    assert session.get(AccessGrant, grant_id) is not None
+
+
 @pytest.fixture
 def setup_assistant_data():
-    session = SessionLocal()
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    session = sessionmaker(bind=engine)()
     unique_suffix = str(uuid.uuid4())[:8]
-
-    created_ids = {
-        "grants": [],
-        "requests": [],
-        "resources": [],
-        "users": [],
-        "departments": [],
-    }
 
     try:
         # 1. Create Isolated Test Departments with Unique Names
@@ -35,7 +65,6 @@ def setup_assistant_data():
         )
         session.add_all([it_dept, hr_dept])
         session.commit()
-        created_ids["departments"].extend([it_dept.id, hr_dept.id])
 
         # 2. Create Isolated Test Users with Unique Emails.
         #    The restricted resource needs a DIFFERENT owner, otherwise
@@ -58,7 +87,6 @@ def setup_assistant_data():
         )
         session.add_all([emp, owner])
         session.commit()
-        created_ids["users"].extend([emp.id, owner.id])
 
         # 3. Create Isolated Test Resources using 'sensitivity' field
         public_res_name = f"Public Employee Guide {unique_suffix}"
@@ -80,7 +108,6 @@ def setup_assistant_data():
         )
         session.add_all([public_res, restricted_res])
         session.commit()
-        created_ids["resources"].extend([public_res.id, restricted_res.id])
 
         # 4. Create Isolated Access Request using 'requester_id' and 'permission'
         acc_req = AccessRequest(
@@ -101,8 +128,6 @@ def setup_assistant_data():
         )
         session.add_all([acc_req, acc_grant])
         session.commit()
-        created_ids["requests"].append(acc_req.id)
-        created_ids["grants"].append(acc_grant.id)
 
         yield {
             "session": session,
@@ -114,58 +139,9 @@ def setup_assistant_data():
             "restricted_res_name": restricted_res_name,
         }
 
-    except Exception:
-        session.rollback()
-        # Clean up any IDs recorded up to the point of failure
-        if created_ids["grants"]:
-            session.query(AccessGrant).filter(
-                AccessGrant.id.in_(created_ids["grants"])
-            ).delete(synchronize_session=False)
-        if created_ids["requests"]:
-            session.query(AccessRequest).filter(
-                AccessRequest.id.in_(created_ids["requests"])
-            ).delete(synchronize_session=False)
-        if created_ids["resources"]:
-            session.query(Resource).filter(
-                Resource.id.in_(created_ids["resources"])
-            ).delete(synchronize_session=False)
-        if created_ids["users"]:
-            session.query(User).filter(
-                User.id.in_(created_ids["users"])
-            ).delete(synchronize_session=False)
-        if created_ids["departments"]:
-            session.query(Department).filter(
-                Department.id.in_(created_ids["departments"])
-            ).delete(synchronize_session=False)
-        session.commit()
-        session.close()
-        raise
-
     finally:
-        # Normal cleanup order: AccessGrant -> AccessRequest -> Resource -> User -> Department
-        if created_ids["grants"]:
-            session.query(AccessGrant).filter(
-                AccessGrant.id.in_(created_ids["grants"])
-            ).delete(synchronize_session=False)
-        if created_ids["requests"]:
-            session.query(AccessRequest).filter(
-                AccessRequest.id.in_(created_ids["requests"])
-            ).delete(synchronize_session=False)
-        if created_ids["resources"]:
-            session.query(Resource).filter(
-                Resource.id.in_(created_ids["resources"])
-            ).delete(synchronize_session=False)
-        if created_ids["users"]:
-            session.query(User).filter(
-                User.id.in_(created_ids["users"])
-            ).delete(synchronize_session=False)
-        if created_ids["departments"]:
-            session.query(Department).filter(
-                Department.id.in_(created_ids["departments"])
-            ).delete(synchronize_session=False)
-
-        session.commit()
         session.close()
+        engine.dispose()
 
 
 def test_assistant_authorized_resource_query(setup_assistant_data):

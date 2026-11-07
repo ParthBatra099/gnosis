@@ -316,7 +316,7 @@ def test_approval_with_expires_at(client, db_session):
     db_session.commit()
 
     owner_token = create_access_token(subject=hr_owner.id)
-    exp_time = "2026-09-25T12:00:00Z"
+    exp_time = (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
     response = client.post(
         f"/access/requests/{req.id}/approve",
         json={"expires_at": exp_time},
@@ -431,3 +431,22 @@ def test_exact_boundary_expiration(db_session):
     )
     assert decision.allowed is False
     assert decision.reason.value == "DENY_DEPARTMENT_MISMATCH"
+
+
+def test_revocation_preserves_history_and_same_department_policy(client, db_session):
+    owner = db_session.query(User).filter_by(email="hr_owner@gnosis.com").one()
+    resource = db_session.query(Resource).filter_by(name="HR Ledger").one()
+    colleague = User(name="Colleague", email="colleague@gnosis.com", password_hash="unused",
+                     department_id=owner.department_id, role="EMPLOYEE", active=True)
+    db_session.add(colleague)
+    db_session.flush()
+    grant = AccessGrant(user_id=colleague.id, resource_id=resource.id, permission="read",
+                        revoked_at=datetime.now(timezone.utc), revoked_by=owner.id)
+    db_session.add(grant)
+    db_session.commit()
+    headers = {"Authorization": f"Bearer {create_access_token(subject=colleague.id)}"}
+    assert client.get(f"/resources/{resource.id}", headers=headers).status_code == 200
+    history = client.get("/access/grants/me", headers=headers).json()
+    assert len(history) == 1
+    assert history[0]["id"] == grant.id
+    assert history[0]["revoked_at"] is not None
