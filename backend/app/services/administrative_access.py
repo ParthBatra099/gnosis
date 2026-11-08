@@ -169,6 +169,23 @@ def lock_events(db, actor_id, event_ids):
             if audit is None:
                 raise HTTPException(403, "Unresolved evidence scope")
             lock_resource_authority(db, actor_id, audit.resource_id, A.DEPARTMENT_INCIDENT_INVESTIGATE)
+        # The event and source resource alone do not describe aggregate evidence.
+        # Hold its immutable scope rows and the actor's existing identity lock,
+        # then revalidate each contributing department using Unit 3's locks.
+        scope_ids = db.scalars(select(MonitoringScope.department_id).where(
+            MonitoringScope.security_event_id == event.id).order_by(MonitoringScope.id)
+            .with_for_update()).all()
+        if event.evidence is not None and not global_monitor(db, actor_id):
+            if not scope_ids or None in scope_ids:
+                raise HTTPException(403, "Unresolved evidence scope")
+            for department_id in sorted(set(scope_ids)):
+                require(authority.revalidate_authority_for_mutation(
+                    db, actor_id, A.DEPARTMENT_INCIDENT_INVESTIGATE,
+                    authority.DepartmentScope(department_id)))
+        # Share read semantics, including legacy evidence and Super Admin rules.
+        if db.scalar(select(SecurityEvent.id).where(SecurityEvent.id == event.id,
+                security_predicate(db, actor_id, action=A.DEPARTMENT_INCIDENT_INVESTIGATE))) is None:
+            raise HTTPException(403, "Evidence not authorized for investigation")
         events.append(event)
     return events
 
