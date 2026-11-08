@@ -76,6 +76,7 @@ def get_or_create_user(
 
 
 def seed_demo_users() -> None:
+    raise SystemExit("Legacy demo seeding is disabled: use reviewed identity provisioning and disposable fixtures. No database was opened.")
     db = SessionLocal()
 
     try:

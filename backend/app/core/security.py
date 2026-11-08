@@ -19,8 +19,12 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return password_hash_context.verify(plain_password, hashed_password)
 
 
-def create_access_token(subject: str, expires_delta: timedelta | None = None) -> str:
-    """Create signed JWT access token containing subject (user_id) and expiration."""
+def create_access_token(subject: str, expires_delta: timedelta | None = None, *, session_id: str | None = None) -> str:
+    """Sign transport claims; only a valid persisted MFA session grants access.
+
+    A token without sid is intentionally rejected by the authentication dependency.
+    Only the completed MFA workflow calls this with a newly committed session.
+    """
     now = datetime.now(timezone.utc)
     if expires_delta:
         expire = now + expires_delta
@@ -32,6 +36,8 @@ def create_access_token(subject: str, expires_delta: timedelta | None = None) ->
         "iat": int(now.timestamp()),
         "exp": int(expire.timestamp()),
     }
+    if session_id is not None:
+        payload["sid"] = session_id
 
     return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
 

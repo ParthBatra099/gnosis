@@ -483,6 +483,7 @@ def verify(db, users_by_email: dict, resources_by_key: dict) -> bool:
 # --------------------------------------------------------------------- main
 
 def main() -> None:
+    raise SystemExit("Legacy demo seeding is disabled: use reviewed identity provisioning and disposable fixtures. No database was opened.")
     parser = argparse.ArgumentParser(description="Seed full GNOSIS demo data (idempotent).")
     parser.add_argument("--dry-run", action="store_true", help="do everything, then roll back")
     args = parser.parse_args()

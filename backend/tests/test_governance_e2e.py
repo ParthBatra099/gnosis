@@ -6,8 +6,10 @@ from sqlalchemy.pool import StaticPool
 
 from app.core.database import Base, get_db
 from app.core.security import hash_password
+from tests.authentication_support import login_mfa
 from app.main import app
 from app.models.department import Department
+from app.models.department_admin_assignment import DepartmentAdminAssignment
 from app.models.resource import Resource
 from app.models.user import User
 
@@ -47,7 +49,13 @@ def db_session():
         department_id=eng_dept.id,
         active=True,
     )
+    # Unit 4: this test administrator is explicitly assigned, independent of ownership.
+    hr_owner.organization_role = "DEPARTMENT_ADMIN"
+    eng_user.organization_role = "EMPLOYEE"
     session.add_all([hr_owner, eng_user])
+    session.commit()
+    session.add(DepartmentAdminAssignment(user_id=hr_owner.id, department_id=hr_dept.id,
+                                          assigned_by=hr_owner.id))
     session.commit()
 
     # Seed cross-department resource owned by hr_owner
@@ -76,19 +84,14 @@ def client(db_session):
             pass
 
     app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as c:
+    with TestClient(app, base_url="https://testserver", client=("127.0.0.1", 50000)) as c:
         yield c
     app.dependency_overrides.clear()
 
 
 def test_e2e_full_access_governance_lifecycle(client, db_session):
     # 1. Employee login via POST /auth/login
-    emp_login_resp = client.post(
-        "/auth/login",
-        json={"email": "eng_emp@gnosis.com", "password": "EmployeePassword123!"},
-    )
-    assert emp_login_resp.status_code == 200
-    token_emp = emp_login_resp.json()["access_token"]
+    token_emp = login_mfa(client, db_session, email="eng_emp@gnosis.com", password="EmployeePassword123!")
     headers_emp = {"Authorization": f"Bearer {token_emp}"}
 
     # Fetch resource ID
@@ -115,12 +118,7 @@ def test_e2e_full_access_governance_lifecycle(client, db_session):
     request_id = request_data["id"]
 
     # 4. Resource Owner login via POST /auth/login
-    owner_login_resp = client.post(
-        "/auth/login",
-        json={"email": "hr_owner@gnosis.com", "password": "OwnerPassword123!"},
-    )
-    assert owner_login_resp.status_code == 200
-    token_owner = owner_login_resp.json()["access_token"]
+    token_owner = login_mfa(client, db_session, email="hr_owner@gnosis.com", password="OwnerPassword123!")
     headers_owner = {"Authorization": f"Bearer {token_owner}"}
 
     # 5. Owner views pending requests
@@ -193,12 +191,7 @@ def test_e2e_full_access_governance_lifecycle(client, db_session):
 
 def test_e2e_access_rejection_workflow(client, db_session):
     # 1. Employee login via POST /auth/login
-    emp_login_resp = client.post(
-        "/auth/login",
-        json={"email": "eng_emp@gnosis.com", "password": "EmployeePassword123!"},
-    )
-    assert emp_login_resp.status_code == 200
-    token_emp = emp_login_resp.json()["access_token"]
+    token_emp = login_mfa(client, db_session, email="eng_emp@gnosis.com", password="EmployeePassword123!")
     headers_emp = {"Authorization": f"Bearer {token_emp}"}
 
     res = db_session.query(Resource).filter_by(name="HR Salary Data").first()
@@ -217,12 +210,7 @@ def test_e2e_access_rejection_workflow(client, db_session):
     request_id = req_resp.json()["id"]
 
     # 3. Owner login via POST /auth/login
-    owner_login_resp = client.post(
-        "/auth/login",
-        json={"email": "hr_owner@gnosis.com", "password": "OwnerPassword123!"},
-    )
-    assert owner_login_resp.status_code == 200
-    token_owner = owner_login_resp.json()["access_token"]
+    token_owner = login_mfa(client, db_session, email="hr_owner@gnosis.com", password="OwnerPassword123!")
     headers_owner = {"Authorization": f"Bearer {token_owner}"}
 
     # 4. Owner sees pending request

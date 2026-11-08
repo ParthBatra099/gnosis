@@ -6,7 +6,8 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.core.database import Base, get_db
-from app.core.security import create_access_token, hash_password
+from app.core.security import hash_password
+from tests.authentication_support import session_token, browser_post
 from app.main import app
 from app.models.department import Department
 from app.models.user import User
@@ -35,6 +36,7 @@ def db_session():
         email="user@gnosis.com",
         password_hash=hash_password("CorrectPassword123!"),
         role="EMPLOYEE",
+        organization_role="EMPLOYEE",
         department_id=dept.id,
         active=True,
     )
@@ -44,6 +46,7 @@ def db_session():
         email="inactive@gnosis.com",
         password_hash=hash_password("CorrectPassword123!"),
         role="EMPLOYEE",
+        organization_role="EMPLOYEE",
         department_id=dept.id,
         active=False,
     )
@@ -65,52 +68,45 @@ def client(db_session):
             pass
 
     app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as c:
+    with TestClient(app, base_url="https://testserver", client=("127.0.0.1", 50000)) as c:
         yield c
     app.dependency_overrides.clear()
 
 
 def test_login_success(client):
-    response = client.post(
-        "/auth/login",
-        json={"email": "user@gnosis.com", "password": "CorrectPassword123!"},
+    response = browser_post(client, "/auth/login", {"email": "user@gnosis.com", "password": "CorrectPassword123!"},
     )
     assert response.status_code == 200
     data = response.json()
-    assert "access_token" in data
-    assert data["token_type"] == "bearer"
+    assert "access_token" not in data
+    assert data["next_step"] == "MFA_ENROLLMENT"
+    assert client.get("/auth/me").status_code == 401
 
 
 def test_login_incorrect_password(client):
-    response = client.post(
-        "/auth/login",
-        json={"email": "user@gnosis.com", "password": "WrongPassword!"},
+    response = browser_post(client, "/auth/login", {"email": "user@gnosis.com", "password": "WrongPassword!"},
     )
     assert response.status_code == 401
-    assert response.json()["detail"] == "Incorrect email or password"
+    assert response.json()["detail"] == "Authentication failed"
 
 
 def test_login_nonexistent_email(client):
-    response = client.post(
-        "/auth/login",
-        json={"email": "nobody@gnosis.com", "password": "CorrectPassword123!"},
+    response = browser_post(client, "/auth/login", {"email": "nobody@gnosis.com", "password": "CorrectPassword123!"},
     )
     assert response.status_code == 401
-    assert response.json()["detail"] == "Incorrect email or password"
+    assert response.json()["detail"] == "Authentication failed"
 
 
 def test_login_inactive_user(client):
-    response = client.post(
-        "/auth/login",
-        json={"email": "inactive@gnosis.com", "password": "CorrectPassword123!"},
+    response = browser_post(client, "/auth/login", {"email": "inactive@gnosis.com", "password": "CorrectPassword123!"},
     )
     assert response.status_code == 401
-    assert response.json()["detail"] == "Inactive user account"
+    assert response.json()["detail"] == "Authentication failed"
 
 
 def test_authenticated_user_profile_success(client, db_session):
     user = db_session.query(User).filter_by(email="user@gnosis.com").first()
-    token = create_access_token(subject=user.id)
+    token = session_token(db_session, subject=user.id)
 
     response = client.get(
         "/auth/me",
@@ -132,7 +128,7 @@ def test_authenticated_user_invalid_token(client):
 
 def test_authenticated_user_expired_token(client, db_session):
     user = db_session.query(User).filter_by(email="user@gnosis.com").first()
-    expired_token = create_access_token(
+    expired_token = session_token(db_session,
         subject=user.id,
         expires_delta=timedelta(seconds=-1),
     )
@@ -142,4 +138,4 @@ def test_authenticated_user_expired_token(client, db_session):
         headers={"Authorization": f"Bearer {expired_token}"},
     )
     assert response.status_code == 401
-    assert response.json()["detail"] == "Token has expired"
+    assert response.json()["detail"] == "Not authenticated"

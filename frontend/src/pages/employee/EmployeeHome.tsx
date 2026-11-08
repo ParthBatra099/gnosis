@@ -347,7 +347,7 @@ export function EmployeeHome() {
                 </strong>
 
                 <span>
-                  {user.role}
+                  {user.organization_role || 'Identity unavailable'}
                 </span>
 
               </div>
@@ -378,8 +378,8 @@ export function EmployeeHome() {
                 </div>
 
                 <div>
-                  <span>Access level</span>
-                  <strong>{user.role}</strong>
+                  <span>Organizational role</span>
+                  <strong>{user.organization_role || 'Identity unavailable'}</strong>
                 </div>
 
               </div>

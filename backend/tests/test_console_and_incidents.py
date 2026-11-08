@@ -6,9 +6,11 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.core.database import Base, get_db
-from app.core.security import create_access_token, hash_password
+from app.core.security import hash_password
+from tests.authentication_support import session_token, browser_post
 from app.main import app
 from app.models.department import Department
+from app.models.department_admin_assignment import DepartmentAdminAssignment
 from app.models.incident import Incident
 from app.models.incident_event import IncidentEvent
 from app.models.resource import Resource
@@ -24,7 +26,7 @@ from app.models.audit_event import AuditEvent
 def test_automatic_reporter_cannot_mutate_incident(client, db_session, payload):
     user = db_session.query(User).filter_by(email="eng_req@gnosis.com").one()
     resource = db_session.query(Resource).filter_by(name="Master Keys").one()
-    headers = {"Authorization": f"Bearer {create_access_token(subject=user.id)}"}
+    headers = {"Authorization": f"Bearer {session_token(db_session, subject=user.id)}"}
     assert client.get(f"/resources/{resource.id}", headers=headers).status_code == 403
     incident = db_session.query(Incident).filter_by(resource_id=resource.id).one()
     assert incident.reporter_id == user.id
@@ -38,17 +40,21 @@ def test_automatic_reporter_cannot_mutate_incident(client, db_session, payload):
     assert incident.status == "OPEN"
     assert incident.assigned_to_id is None
     assert incident.resolution_notes is None
-    assert client.get(f"/console/incidents/{incident.id}", headers=headers).status_code == 200
+    # Unit 4 supersedes reporter-only administrative viewing as well.
+    assert client.get(f"/console/incidents/{incident.id}", headers=headers).status_code == 404
 
 
-def test_explicit_assignee_can_update_incident(client, db_session):
+def test_explicit_assignee_with_department_authority_can_update_incident(client, db_session):
     user = db_session.query(User).filter_by(email="eng_req@gnosis.com").one()
     resource = db_session.query(Resource).filter_by(name="HR Payroll Data").one()
+    user.organization_role = "DEPARTMENT_ADMIN"
+    db_session.add(DepartmentAdminAssignment(user_id=user.id, department_id=resource.department_id,
+                                            assigned_by=user.id))
     incident = Incident(title="Assigned", description="Test", severity="LOW",
                         resource_id=resource.id, assigned_to_id=user.id)
     db_session.add(incident)
     db_session.commit()
-    headers = {"Authorization": f"Bearer {create_access_token(subject=user.id)}"}
+    headers = {"Authorization": f"Bearer {session_token(db_session, subject=user.id)}"}
     response = client.patch(f"/console/incidents/{incident.id}",
                             json={"status": "INVESTIGATING"}, headers=headers)
     assert response.status_code == 200
@@ -69,11 +75,12 @@ def test_incident_detail_filters_each_linked_event(client, db_session):
     db_session.add_all([IncidentEvent(incident_id=incident.id, security_event_id=e.id)
                         for e in (visible, hidden)])
     db_session.commit()
-    for principal, expected in [(user, {visible.id}), (owner, {visible.id, hidden.id})]:
-        headers = {"Authorization": f"Bearer {create_access_token(subject=principal.id)}"}
+    for principal, expected in [(user, None), (owner, {visible.id, hidden.id})]:
+        headers = {"Authorization": f"Bearer {session_token(db_session, subject=principal.id)}"}
         response = client.get(f"/console/incidents/{incident.id}", headers=headers)
-        assert response.status_code == 200
-        assert {e["id"] for e in response.json()["security_events"]} == expected
+        assert response.status_code == (404 if expected is None else 200)
+        if expected is not None:
+            assert {e["id"] for e in response.json()["security_events"]} == expected
     assert db_session.query(IncidentEvent).count() == 2
 
 
@@ -89,7 +96,7 @@ def test_invalid_create_evidence_leaves_no_partial_incident(client, db_session, 
     db_session.add_all([valid, hidden])
     db_session.commit()
     before = (db_session.query(Incident).count(), db_session.query(IncidentEvent).count())
-    headers = {"Authorization": f"Bearer {create_access_token(subject=owner.id)}"}
+    headers = {"Authorization": f"Bearer {session_token(db_session, subject=owner.id)}"}
     response = client.post("/console/incidents", headers=headers, json={
         "title": "Must not persist", "description": "Test", "severity": "LOW",
         "resource_id": resource.id,
@@ -106,7 +113,7 @@ def test_create_incident_commits_unique_links_and_audit(client, db_session):
                              description="Retained evidence")
     db_session.add(evidence)
     db_session.commit()
-    headers = {"Authorization": f"Bearer {create_access_token(subject=owner.id)}"}
+    headers = {"Authorization": f"Bearer {session_token(db_session, subject=owner.id)}"}
     response = client.post("/console/incidents", headers=headers, json={
         "title": "Valid", "description": "Test", "severity": "LOW",
         "resource_id": resource.id, "security_event_ids": [evidence.id, evidence.id],
@@ -138,7 +145,7 @@ def test_link_persistence_failure_rolls_back_new_incident(client, db_session):
             client.post("/console/incidents", json={
                 "title": "Atomic", "description": "Test", "severity": "LOW",
                 "resource_id": resource.id, "security_event_ids": [evidence_id],
-            }, headers={"Authorization": f"Bearer {create_access_token(subject=owner.id)}"})
+            }, headers={"Authorization": f"Bearer {session_token(db_session, subject=owner.id)}"})
     finally:
         event.remove(IncidentEvent, "before_insert", fail_link)
     assert attempts == [evidence_id]
@@ -172,6 +179,7 @@ def db_session():
         email="hr_owner@gnosis.com",
         password_hash=hash_password("Pass123!"),
         role="EMPLOYEE",
+        organization_role="EMPLOYEE",
         department_id=hr_dept.id,
         active=True,
     )
@@ -180,10 +188,17 @@ def db_session():
         email="eng_req@gnosis.com",
         password_hash=hash_password("Pass123!"),
         role="EMPLOYEE",
+        organization_role="EMPLOYEE",
         department_id=eng_dept.id,
         active=True,
     )
+    # Unit 4: this test administrator is explicitly assigned, independent of ownership.
+    hr_owner.organization_role = "DEPARTMENT_ADMIN"
+    eng_user.organization_role = "EMPLOYEE"
     session.add_all([hr_owner, eng_user])
+    session.commit()
+    session.add(DepartmentAdminAssignment(user_id=hr_owner.id, department_id=hr_dept.id,
+                                          assigned_by=hr_owner.id))
     session.commit()
 
     # Seed resources
@@ -219,7 +234,7 @@ def client(db_session):
             pass
 
     app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as c:
+    with TestClient(app, base_url="https://testserver", client=("127.0.0.1", 50000)) as c:
         yield c
     app.dependency_overrides.clear()
 
@@ -227,7 +242,7 @@ def client(db_session):
 def test_manual_incident_creation_success(client, db_session):
     hr_owner = db_session.query(User).filter_by(email="hr_owner@gnosis.com").first()
     res = db_session.query(Resource).filter_by(name="HR Payroll Data").first()
-    token = create_access_token(subject=hr_owner.id)
+    token = session_token(db_session, subject=hr_owner.id)
 
     resp = client.post(
         "/console/incidents",
@@ -248,7 +263,7 @@ def test_manual_incident_creation_success(client, db_session):
 def test_unauthorized_incident_access_denied(client, db_session):
     eng_user = db_session.query(User).filter_by(email="eng_req@gnosis.com").first()
     res = db_session.query(Resource).filter_by(name="HR Payroll Data").first()
-    token = create_access_token(subject=eng_user.id)
+    token = session_token(db_session, subject=eng_user.id)
 
     # Eng user attempts to create incident for HR resource -> 403
     resp = client.post(
@@ -267,7 +282,7 @@ def test_unauthorized_incident_access_denied(client, db_session):
 def test_incident_status_workflow(client, db_session):
     hr_owner = db_session.query(User).filter_by(email="hr_owner@gnosis.com").first()
     res = db_session.query(Resource).filter_by(name="HR Payroll Data").first()
-    token = create_access_token(subject=hr_owner.id)
+    token = session_token(db_session, subject=hr_owner.id)
 
     # 1. Create OPEN incident
     inc_resp = client.post(
@@ -316,7 +331,7 @@ def test_incident_status_workflow(client, db_session):
 def test_invalid_status_transition_rejected(client, db_session):
     hr_owner = db_session.query(User).filter_by(email="hr_owner@gnosis.com").first()
     res = db_session.query(Resource).filter_by(name="HR Payroll Data").first()
-    token = create_access_token(subject=hr_owner.id)
+    token = session_token(db_session, subject=hr_owner.id)
 
     inc_resp = client.post(
         "/console/incidents",
@@ -338,7 +353,7 @@ def test_invalid_status_transition_rejected(client, db_session):
 def test_attach_security_events_and_prevent_duplicates(client, db_session):
     hr_owner = db_session.query(User).filter_by(email="hr_owner@gnosis.com").first()
     res = db_session.query(Resource).filter_by(name="HR Payroll Data").first()
-    token = create_access_token(subject=hr_owner.id)
+    token = session_token(db_session, subject=hr_owner.id)
 
     sec_event = SecurityEvent(
         event_type="CRITICAL_RESOURCE_ACCESS",
@@ -377,7 +392,7 @@ def test_attach_security_events_and_prevent_duplicates(client, db_session):
 def test_automatic_incident_escalation_on_high_severity_event(client, db_session):
     eng_user = db_session.query(User).filter_by(email="eng_req@gnosis.com").first()
     crit_res = db_session.query(Resource).filter_by(name="Master Keys").first()
-    token = create_access_token(subject=eng_user.id)
+    token = session_token(db_session, subject=eng_user.id)
 
     # Accessing CRITICAL resource produces CRITICAL SecurityEvent
     client.get(f"/resources/{crit_res.id}", headers={"Authorization": f"Bearer {token}"})
@@ -392,7 +407,7 @@ def test_automatic_incident_escalation_on_high_severity_event(client, db_session
 def test_multiple_high_events_do_not_create_duplicate_incidents(client, db_session):
     eng_user = db_session.query(User).filter_by(email="eng_req@gnosis.com").first()
     crit_res = db_session.query(Resource).filter_by(name="Master Keys").first()
-    token = create_access_token(subject=eng_user.id)
+    token = session_token(db_session, subject=eng_user.id)
 
     # Trigger 2 CRITICAL security events on same resource
     client.get(f"/resources/{crit_res.id}", headers={"Authorization": f"Bearer {token}"})
@@ -443,8 +458,8 @@ def test_deleting_incident_preserves_security_event(db_session):
 def test_dashboard_summary_scope(client, db_session):
     hr_owner = db_session.query(User).filter_by(email="hr_owner@gnosis.com").first()
     eng_user = db_session.query(User).filter_by(email="eng_req@gnosis.com").first()
-    token_owner = create_access_token(subject=hr_owner.id)
-    token_eng = create_access_token(subject=eng_user.id)
+    token_owner = session_token(db_session, subject=hr_owner.id)
+    token_eng = session_token(db_session, subject=eng_user.id)
 
     # Owner summary
     resp_owner = client.get("/console/dashboard/summary", headers={"Authorization": f"Bearer {token_owner}"})

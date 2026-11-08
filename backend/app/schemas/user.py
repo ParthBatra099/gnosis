@@ -1,4 +1,5 @@
 from pydantic import BaseModel, ConfigDict, EmailStr
+from app.core.constants import OrganizationRole
 
 
 class UserRead(BaseModel):
@@ -6,6 +7,7 @@ class UserRead(BaseModel):
     name: str
     email: EmailStr
     role: str
+    organization_role: OrganizationRole | None
     department_id: str
     active: bool
 

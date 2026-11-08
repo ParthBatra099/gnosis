@@ -2,16 +2,19 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
 import { useAuth } from '../hooks/useAuth';
 import { ProtectedRoute } from './ProtectedRoute';
+import { getDefaultRouteForUser, isAdministrator } from '../utils/roles';
 
 import { EmployeeLayout } from '../layouts/EmployeeLayout';
 import { AdminLayout } from '../layouts/AdminLayout';
 
 import { Login } from '../pages/auth/Login';
+import { SessionManagement } from '../pages/auth/SessionManagement';
 
 import { EmployeeHome } from '../pages/employee/EmployeeHome';
 import { AskGnosis } from '../pages/employee/AskGnosis';
 
 import { AdminDashboard } from '../pages/admin/AdminDashboard';
+import { OrganizationPage } from '../pages/admin/OrganizationPage';
 import { AccessRequests as EmployeeAccessRequests } from '../pages/employee/AccessRequests';
 import { AccessRequests as AdminAccessRequests } from '../pages/admin/AccessRequests';
 
@@ -44,21 +47,7 @@ function RootRedirect() {
     );
   }
 
-  if (user.role?.toUpperCase() === 'ADMIN') {
-    return (
-      <Navigate
-        to="/admin"
-        replace
-      />
-    );
-  }
-
-  return (
-    <Navigate
-      to="/employee"
-      replace
-    />
-  );
+  return <Navigate to={getDefaultRouteForUser(user)} replace />;
 }
 
 
@@ -66,11 +55,20 @@ function RootRedirect() {
    SHARED LAYOUT
    ========================================================= */
 
+function IdentityUnavailable() {
+  const { user, isAuthenticated, isLoading, logout } = useAuth();
+  if (isLoading) return <p>Verifying session…</p>;
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (getDefaultRouteForUser(user) !== '/identity-unavailable') return <Navigate to="/" replace />;
+  return <main className="gnosis-auth-panel"><section><h1>Organizational identity unavailable</h1>
+    <p>No recognized canonical role was returned. Role-specific navigation is unavailable. Contact your organization’s identity administrator.</p>
+    <button type="button" onClick={() => void logout()}>Sign out</button></section></main>;
+}
+
 function SharedLayout() {
   const { user } = useAuth();
 
-  const isAdmin =
-    user?.role?.toUpperCase() === 'ADMIN';
+  const isAdmin = isAdministrator(user);
 
   return isAdmin
     ? <AdminLayout />
@@ -87,6 +85,7 @@ export function AppRoutes() {
     <BrowserRouter>
 
       <Routes>
+        <Route path="/identity-unavailable" element={<IdentityUnavailable />} />
 
         {/* =================================================
             ROOT
@@ -124,6 +123,7 @@ export function AppRoutes() {
             path="/ask-gnosis"
             element={<AskGnosis />}
           />
+          <Route path="/sessions" element={<SessionManagement />} />
 
         </Route>
 
@@ -176,7 +176,7 @@ export function AppRoutes() {
           path="/admin"
           element={
             <ProtectedRoute
-              allowedRoles={['ADMIN']}
+              allowedRoles={['SUPER_ADMIN', 'DEPARTMENT_ADMIN']}
             >
               <AdminLayout />
             </ProtectedRoute>
@@ -184,6 +184,10 @@ export function AppRoutes() {
         >
 
           {/* Admin Dashboard */}
+          <Route path="departments" element={<OrganizationPage section="departments" />} />
+          <Route path="employees" element={<OrganizationPage section="employees" />} />
+          <Route path="employees/:userId/sessions" element={<ProtectedRoute allowedRoles={['SUPER_ADMIN']}><SessionManagement /></ProtectedRoute>} />
+          <Route path="assignments" element={<ProtectedRoute allowedRoles={['SUPER_ADMIN']}><OrganizationPage section="assignments" /></ProtectedRoute>} />
 
           <Route
             index

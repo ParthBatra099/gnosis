@@ -167,6 +167,7 @@ def ensure_read_grant(db, user, resource, perm, granted_by, stats):
 
 
 def main() -> None:
+    raise SystemExit("Legacy demo seeding is disabled: use reviewed identity provisioning and disposable fixtures. No database was opened.")
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true", help="do everything, then roll back")
     args = parser.parse_args()

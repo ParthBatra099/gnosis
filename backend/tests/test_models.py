@@ -44,6 +44,7 @@ def test_user_persistence_and_department_relationship(db_session):
         email="alice@gnosis.local",
         password_hash="secret_hash",
         role="SECURITY_ANALYST",
+        organization_role="EMPLOYEE",
         department_id=dept.id,
     )
     db_session.add(user)
@@ -64,6 +65,7 @@ def test_resource_persistence_and_relationships(db_session):
         email="bob@gnosis.local",
         password_hash="secret_hash",
         role="RESOURCE_OWNER",
+        organization_role="EMPLOYEE",
         department_id=dept.id,
     )
     db_session.add(owner)
@@ -112,8 +114,8 @@ def test_user_email_uniqueness(db_session):
     db_session.add(dept)
     db_session.commit()
 
-    u1 = User(name="User1", email="same@gnosis.local", password_hash="h1", department_id=dept.id)
-    u2 = User(name="User2", email="same@gnosis.local", password_hash="h2", department_id=dept.id)
+    u1 = User(name="User1", email="same@gnosis.local", password_hash="h1", department_id=dept.id, organization_role="EMPLOYEE")
+    u2 = User(name="User2", email="same@gnosis.local", password_hash="h2", department_id=dept.id, organization_role="EMPLOYEE")
     db_session.add(u1)
     db_session.commit()
 

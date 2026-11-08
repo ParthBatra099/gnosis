@@ -74,6 +74,7 @@ def setup_assistant_data():
             email=f"assist.emp.{unique_suffix}@gnosis.com",
             password_hash=hash_password("Pass@123"),
             role="EMPLOYEE",
+            organization_role="EMPLOYEE",
             department_id=hr_dept.id,
             active=True,
         )
@@ -82,6 +83,7 @@ def setup_assistant_data():
             email=f"assist.owner.{unique_suffix}@gnosis.com",
             password_hash=hash_password("Pass@123"),
             role="EMPLOYEE",
+            organization_role="EMPLOYEE",
             department_id=it_dept.id,
             active=True,
         )

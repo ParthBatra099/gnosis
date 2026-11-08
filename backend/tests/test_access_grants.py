@@ -5,10 +5,12 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.core.database import Base, get_db
-from app.core.security import create_access_token, hash_password
+from app.core.security import hash_password
+from tests.authentication_support import session_token, browser_post
 from app.main import app
 from app.models.access_request import AccessRequest
 from app.models.department import Department
+from app.models.department_admin_assignment import DepartmentAdminAssignment
 from app.models.resource import Resource
 from app.models.user import User
 
@@ -37,6 +39,7 @@ def db_session():
         email="hr_owner@gnosis.com",
         password_hash=hash_password("Pass123!"),
         role="EMPLOYEE",
+        organization_role="EMPLOYEE",
         department_id=hr_dept.id,
         active=True,
     )
@@ -45,10 +48,17 @@ def db_session():
         email="eng_req@gnosis.com",
         password_hash=hash_password("Pass123!"),
         role="EMPLOYEE",
+        organization_role="EMPLOYEE",
         department_id=eng_dept.id,
         active=True,
     )
+    # Unit 4: this test administrator is explicitly assigned, independent of ownership.
+    hr_owner.organization_role = "DEPARTMENT_ADMIN"
+    eng_user.organization_role = "EMPLOYEE"
     session.add_all([hr_owner, eng_user])
+    session.commit()
+    session.add(DepartmentAdminAssignment(user_id=hr_owner.id, department_id=hr_dept.id,
+                                          assigned_by=hr_owner.id))
     session.commit()
 
     # Seed cross-department resource owned by hr_owner
@@ -77,7 +87,7 @@ def client(db_session):
             pass
 
     app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as c:
+    with TestClient(app, base_url="https://testserver", client=("127.0.0.1", 50000)) as c:
         yield c
     app.dependency_overrides.clear()
 
@@ -87,8 +97,8 @@ def test_owner_approve_request_and_grant_access(client, db_session):
     eng_user = db_session.query(User).filter_by(email="eng_req@gnosis.com").first()
     resource = db_session.query(Resource).filter_by(name="HR Payroll Master").first()
 
-    eng_token = create_access_token(subject=eng_user.id)
-    owner_token = create_access_token(subject=hr_owner.id)
+    eng_token = session_token(db_session, subject=eng_user.id)
+    owner_token = session_token(db_session, subject=hr_owner.id)
 
     # 1. Requester submits request
     req_resp = client.post(
@@ -139,7 +149,7 @@ def test_non_owner_cannot_approve_request(client, db_session):
     eng_user = db_session.query(User).filter_by(email="eng_req@gnosis.com").first()
     resource = db_session.query(Resource).filter_by(name="HR Payroll Master").first()
 
-    eng_token = create_access_token(subject=eng_user.id)
+    eng_token = session_token(db_session, subject=eng_user.id)
 
     # Requester submits request
     req_resp = client.post(
@@ -162,8 +172,8 @@ def test_owner_reject_request(client, db_session):
     eng_user = db_session.query(User).filter_by(email="eng_req@gnosis.com").first()
     resource = db_session.query(Resource).filter_by(name="HR Payroll Master").first()
 
-    eng_token = create_access_token(subject=eng_user.id)
-    owner_token = create_access_token(subject=hr_owner.id)
+    eng_token = session_token(db_session, subject=eng_user.id)
+    owner_token = session_token(db_session, subject=hr_owner.id)
 
     # Submit request
     req_resp = client.post(
@@ -194,8 +204,8 @@ def test_cannot_reapprove_or_rereject_completed_request(client, db_session):
     eng_user = db_session.query(User).filter_by(email="eng_req@gnosis.com").first()
     resource = db_session.query(Resource).filter_by(name="HR Payroll Master").first()
 
-    eng_token = create_access_token(subject=eng_user.id)
-    owner_token = create_access_token(subject=hr_owner.id)
+    eng_token = session_token(db_session, subject=eng_user.id)
+    owner_token = session_token(db_session, subject=hr_owner.id)
 
     # Submit and approve
     req_resp = client.post(

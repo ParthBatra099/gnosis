@@ -9,7 +9,10 @@ from app.core.config import settings
 engine = create_engine(
     settings.DATABASE_URL,
     pool_pre_ping=True,
-    echo=settings.DEBUG,
+    # Authentication rows contain credentials and opaque session capabilities.
+    # Application debug mode must never enable SQL parameter logging.
+    echo=False,
+    hide_parameters=True,
 )
 
 SessionLocal = sessionmaker(

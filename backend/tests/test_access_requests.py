@@ -7,7 +7,8 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.core.database import Base, get_db
-from app.core.security import create_access_token, hash_password
+from app.core.security import hash_password
+from tests.authentication_support import session_token, browser_post
 from app.main import app
 from app.models.access_grant import AccessGrant
 from app.models.access_request import AccessRequest
@@ -38,7 +39,7 @@ def test_request_checks_only_active_grants(client, db_session, state, expected):
         db_session.add(AccessGrant(user_id=user.id, resource_id=resource.id, permission="read"))
     db_session.commit()
     original_grant_id = grant.id
-    token = create_access_token(subject=user.id)
+    token = session_token(db_session, subject=user.id)
     with patch("app.api.v1.access.datetime", wraps=datetime) as clock:
         clock.now.return_value = now
         response = client.post("/access/requests", json={
@@ -72,6 +73,7 @@ def db_session():
         email="hr_emp@gnosis.com",
         password_hash=hash_password("Pass123!"),
         role="EMPLOYEE",
+        organization_role="EMPLOYEE",
         department_id=hr_dept.id,
         active=True,
     )
@@ -80,6 +82,7 @@ def db_session():
         email="eng_emp@gnosis.com",
         password_hash=hash_password("Pass123!"),
         role="EMPLOYEE",
+        organization_role="EMPLOYEE",
         department_id=eng_dept.id,
         active=True,
     )
@@ -112,7 +115,7 @@ def client(db_session):
             pass
 
     app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as c:
+    with TestClient(app, base_url="https://testserver", client=("127.0.0.1", 50000)) as c:
         yield c
     app.dependency_overrides.clear()
 
@@ -120,7 +123,7 @@ def client(db_session):
 def test_create_access_request_success(client, db_session):
     eng_user = db_session.query(User).filter_by(email="eng_emp@gnosis.com").first()
     res = db_session.query(Resource).filter_by(name="HR Payroll File").first()
-    token = create_access_token(subject=eng_user.id)
+    token = session_token(db_session, subject=eng_user.id)
 
     response = client.post(
         "/access/requests",
@@ -146,7 +149,7 @@ def test_create_access_request_already_authorized(client, db_session):
     """
     hr_user = db_session.query(User).filter_by(email="hr_emp@gnosis.com").first()
     res = db_session.query(Resource).filter_by(name="HR Payroll File").first()
-    token = create_access_token(subject=hr_user.id)
+    token = session_token(db_session, subject=hr_user.id)
 
     # Seed explicit grant
     grant = AccessGrant(
@@ -174,7 +177,7 @@ def test_create_access_request_already_authorized(client, db_session):
 def test_create_access_request_duplicate_pending(client, db_session):
     eng_user = db_session.query(User).filter_by(email="eng_emp@gnosis.com").first()
     res = db_session.query(Resource).filter_by(name="HR Payroll File").first()
-    token = create_access_token(subject=eng_user.id)
+    token = session_token(db_session, subject=eng_user.id)
 
     # First submission -> Success
     resp1 = client.post(
@@ -197,7 +200,7 @@ def test_create_access_request_duplicate_pending(client, db_session):
 def test_create_access_request_unsupported_permission(client, db_session):
     eng_user = db_session.query(User).filter_by(email="eng_emp@gnosis.com").first()
     res = db_session.query(Resource).filter_by(name="HR Payroll File").first()
-    token = create_access_token(subject=eng_user.id)
+    token = session_token(db_session, subject=eng_user.id)
 
     response = client.post(
         "/access/requests",
@@ -210,7 +213,7 @@ def test_create_access_request_unsupported_permission(client, db_session):
 
 def test_create_access_request_missing_resource(client, db_session):
     eng_user = db_session.query(User).filter_by(email="eng_emp@gnosis.com").first()
-    token = create_access_token(subject=eng_user.id)
+    token = session_token(db_session, subject=eng_user.id)
 
     response = client.post(
         "/access/requests",
@@ -235,8 +238,8 @@ def test_get_my_access_requests_history(client, db_session):
     hr_user = db_session.query(User).filter_by(email="hr_emp@gnosis.com").first()
     res = db_session.query(Resource).filter_by(name="HR Payroll File").first()
 
-    eng_token = create_access_token(subject=eng_user.id)
-    hr_token = create_access_token(subject=hr_user.id)
+    eng_token = session_token(db_session, subject=eng_user.id)
+    hr_token = session_token(db_session, subject=hr_user.id)
 
     # Submit request as eng_user
     client.post(

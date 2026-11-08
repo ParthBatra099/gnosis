@@ -165,6 +165,7 @@ export function AdminDashboard() {
 
   return (
     <div className="admin-dashboard">
+      <p role="note">Demonstration dashboard: staff, performance and security-event figures below are sample data. Use Organization management for server-backed identity records.</p>
 
       {/* PAGE HEADER */}
       <section className="admin-page-header">
