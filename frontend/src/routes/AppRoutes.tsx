@@ -14,6 +14,10 @@ import { EmployeeHome } from '../pages/employee/EmployeeHome';
 import { AskGnosis } from '../pages/employee/AskGnosis';
 
 import { AdminDashboard } from '../pages/admin/AdminDashboard';
+import { SecurityEvents } from '../pages/admin/SecurityEvents';
+import { Incidents } from '../pages/admin/Incidents';
+import { AuditLogs } from '../pages/admin/AuditLogs';
+import { SecurityTimeline } from '../pages/admin/SecurityTimeline';
 import { OrganizationPage } from '../pages/admin/OrganizationPage';
 import { AccessRequests as EmployeeAccessRequests } from '../pages/employee/AccessRequests';
 import { AccessRequests as AdminAccessRequests } from '../pages/admin/AccessRequests';
@@ -184,6 +188,10 @@ export function AppRoutes() {
         >
 
           {/* Admin Dashboard */}
+          <Route path="security-events" element={<SecurityEvents />} />
+          <Route path="incidents" element={<Incidents />} />
+          <Route path="audit-logs" element={<AuditLogs />} />
+          <Route path="timeline" element={<SecurityTimeline />} />
           <Route path="departments" element={<OrganizationPage section="departments" />} />
           <Route path="employees" element={<OrganizationPage section="employees" />} />
           <Route path="employees/:userId/sessions" element={<ProtectedRoute allowedRoles={['SUPER_ADMIN']}><SessionManagement /></ProtectedRoute>} />

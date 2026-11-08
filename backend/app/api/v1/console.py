@@ -69,6 +69,31 @@ def create_incident(
     return result
 
 
+@router.get("/incidents/page")
+def incident_page(
+    status_filter: str | None = Query(default=None, alias="status"),
+    severity: str | None = None, start: datetime | None = None, end: datetime | None = None,
+    limit: int = Query(default=25, ge=1, le=100), offset: int = Query(default=0, ge=0),
+    current_user: User = Depends(get_current_user), db: Session = Depends(get_db),
+):
+    from sqlalchemy import select, func
+    from app.models import RiskAssessment
+    from app.services.risk_monitoring import monitoring_query
+    from app.services.security_console import visible_incidents, validate_window, window
+    monitoring_query(db, current_user.id, RiskAssessment)
+    validate_window(start, end)
+    query = select(Incident).where(Incident.id.in_(visible_incidents(db, current_user.id)))
+    if status_filter:
+        query = query.where(Incident.status == status_filter)
+    if severity:
+        query = query.where(Incident.severity == severity)
+    query = window(query, Incident.created_at, start, end)
+    total = db.scalar(select(func.count()).select_from(query.subquery()))
+    rows = db.scalars(query.order_by(Incident.created_at.desc(), Incident.id.desc()).limit(limit).offset(offset)).all()
+    return {"items": [IncidentRead.model_validate(row).model_dump(mode="json") for row in rows],
+            "total": total, "limit": limit, "offset": offset}
+
+
 @router.get("/incidents/{incident_id}", response_model=IncidentDetailRead)
 def get_incident_detail(
     incident_id: str,
@@ -83,6 +108,17 @@ def get_incident_detail(
         admin.security_query(db, current_user.id).join(
             IncidentEvent, IncidentEvent.security_event_id == SecurityEvent.id
         ).filter(IncidentEvent.incident_id == incident_id).all()]
+    from app.models import AuditEvent
+    from app.schemas.risk import DetectionRead
+    detail.detection_evidence = [DetectionRead.model_validate(event).model_dump(mode="json") for event in
+        admin.security_query(db, current_user.id).join(IncidentEvent, IncidentEvent.security_event_id == SecurityEvent.id)
+        .filter(IncidentEvent.incident_id == incident_id).all()]
+    detail.history = [{"id": row.id, "timestamp": row.timestamp, "actor_id": row.actor_id,
+                       "action": row.action, "status": (row.context_data or {}).get("status")}
+        for row in admin.audit_query(db, current_user.id).filter(
+            AuditEvent.context_data["incident_id"].as_string() == incident_id,
+            AuditEvent.action.in_(["INCIDENT_CREATED", "INCIDENT_UPDATED", "INCIDENT_EVENTS_ATTACHED"]))
+        .order_by(AuditEvent.timestamp.desc(), AuditEvent.id.desc()).all()]
     return detail
 
 
@@ -154,3 +190,12 @@ def get_dashboard_summary(
             SecurityEvent.severity == "CRITICAL").count(),
         pending_access_requests=admin.pending_query(db, current_user.id).count(),
     )
+
+
+@router.get("/dashboard/security-overview")
+def security_overview(
+    start: datetime | None = None, end: datetime | None = None,
+    current_user: User = Depends(get_current_user), db: Session = Depends(get_db),
+):
+    from app.services.security_console import overview
+    return overview(db, current_user.id, start=start, end=end)

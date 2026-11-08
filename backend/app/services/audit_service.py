@@ -22,6 +22,12 @@ def record_audit_event(
     Failsafe: Never raises exceptions or affects calling authorization/access workflows.
     """
     try:
+        if action == "RESOURCE_ACCESS" and resource_id:
+            from app.models import Resource
+            resource = db.get(Resource, resource_id)
+            if resource:
+                context_data = {**(context_data or {}), "department_id": resource.department_id,
+                                "sensitivity": resource.sensitivity}
         audit_event = AuditEvent(
             actor_id=actor_id,
             action=action,
@@ -35,10 +41,15 @@ def record_audit_event(
         db.refresh(audit_event)
 
         # Trigger detection engine
-        evaluate_detection_rules(db, audit_event)
+        try:
+            evaluate_detection_rules(db, audit_event)
+            db.commit()  # Caller owns observation transaction, never the engine.
+        except Exception:
+            db.rollback()
+            logger.error("Detection processing failed; committed audit retained for explicit replay")
 
         return audit_event
-    except Exception as err:
-        logger.error(f"Failed to record audit event: {err}")
+    except Exception:
+        logger.error("Failed to record audit event")
         db.rollback()
         return None

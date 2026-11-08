@@ -2,7 +2,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
-from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy import DateTime, ForeignKey, String, Text, JSON, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
@@ -14,6 +14,10 @@ if TYPE_CHECKING:
 
 class SecurityEvent(Base):
     __tablename__ = "security_events"
+    __table_args__ = (UniqueConstraint("episode_key", name="uq_security_events_episode_key"),)
+
+    episode_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    evidence: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
     id: Mapped[str] = mapped_column(
         String(36), primary_key=True, default=lambda: str(uuid.uuid4())

@@ -28,7 +28,7 @@ def test_revision_is_additive_next_head_and_fits_alembic_version_column(monkeypa
     backend = Path(__file__).resolve().parents[1]
     config = Config(); config.set_main_option("script_location", str(backend / "alembic"))
     scripts = ScriptDirectory.from_config(config)
-    assert scripts.get_heads() == ["0010_phase2_identity_validation"]
+    assert scripts.get_heads() == ["0012"]
     assert len(module.revision) <= 32
     assert module.down_revision == "0008_phase2_authentication"
     output = StringIO()

@@ -12,6 +12,7 @@ from app.models.audit_event import AuditEvent
 from app.models.incident import Incident
 from app.models.incident_event import IncidentEvent
 from app.models.security_event import SecurityEvent
+from app.models.risk_assessment import MonitoringScope
 from app.security.detection_engine import evaluate_detection_rules
 from app.services import organization_authority as authority
 
@@ -37,13 +38,14 @@ def mutation_transaction(source: Session):
     with Session(bind=source.get_bind(), autoflush=False, expire_on_commit=False) as db:
         with db.begin():
             yield db
-        # Existing detection commits internally; run only after the atomic commit.
+        # Detection never owns commits. Keep observation after the atomic mutation.
         for event in db.info.get("administrative_audits", []):
             try:
-                evaluate_detection_rules(db, event)
+                with db.begin():
+                    evaluate_detection_rules(db, event)
             except Exception:
                 db.rollback()
-                logging.getLogger(__name__).exception("Post-commit detection failed")
+                logging.getLogger(__name__).error("Post-commit detection failed")
 
 
 def append_audit(db, *, actor_id, resource_id, action, reason, context_data):
@@ -77,7 +79,12 @@ def global_monitor(db, actor_id):
 def audit_predicate(db, actor_id, model=AuditEvent):
     if global_monitor(db, actor_id):
         return true()
-    return resource_predicate(db, actor_id, A.DEPARTMENT_SECURITY_MONITOR, model.resource_id)
+    incident_action = model.action.like("INCIDENT_%")
+    incident_id = model.context_data["incident_id"].as_string()
+    visible_incident = exists(select(Incident.id).where(Incident.id == incident_id,
+                                                       incident_predicate(db, actor_id)))
+    return and_(resource_predicate(db, actor_id, A.DEPARTMENT_SECURITY_MONITOR, model.resource_id),
+                or_(~incident_action, visible_incident))
 
 
 def security_predicate(db, actor_id, model=SecurityEvent, action=A.DEPARTMENT_SECURITY_MONITOR):
@@ -89,7 +96,18 @@ def security_predicate(db, actor_id, model=SecurityEvent, action=A.DEPARTMENT_SE
         or_(model.source_audit_id.is_(None), exists(select(source.id).where(
             source.id == model.source_audit_id,
             resource_predicate(db, actor_id, action, source.resource_id)))),
+        or_(model.evidence.is_(None), complete_monitoring_scope(db, actor_id, model.id, "security_event_id", action)),
     )
+
+
+def complete_monitoring_scope(db, actor_id, target_id, target_column, action=A.DEPARTMENT_SECURITY_MONITOR):
+    """Every evidence department must be authorized. Unknown/missing scope fails closed."""
+    ids = departments(db, actor_id, action)
+    column = getattr(MonitoringScope, target_column)
+    present = exists(select(MonitoringScope.id).where(column == target_id))
+    forbidden = exists(select(MonitoringScope.id).where(column == target_id,
+        or_(MonitoringScope.department_id.is_(None), ~MonitoringScope.department_id.in_(ids))))
+    return and_(present, ~forbidden)
 
 
 def incident_predicate(db, actor_id):

@@ -50,7 +50,7 @@ def test_revision_extends_verified_repository_head(revision):
     config.set_main_option("script_location", str(BACKEND / "alembic"))
     scripts = ScriptDirectory.from_config(config)
     # Unit 5 adds a descendant; 0007's verified identity dependency remains intact.
-    assert scripts.get_heads() == ["0010_phase2_identity_validation"]
+    assert scripts.get_heads() == ["0012"]
     assert scripts.get_revision("0009_phase2_org_management").down_revision == "0008_phase2_authentication"
     assert scripts.get_revision("0008_phase2_authentication").down_revision == revision.revision
     assert scripts.get_revision(revision.down_revision).down_revision == "0005_phase_3"

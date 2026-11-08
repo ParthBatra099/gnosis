@@ -139,8 +139,8 @@ test('recovery acknowledgement waits for the pending profile attempt and cannot 
   assert.equal(controller.snapshot().stage, 'authenticated');
   assert.deepEqual(controller.snapshot().recoveryCodes, []);
 });
-test('controlled login copy contains no replacement glyphs and dashboard labels demo data', () => {
+test('controlled login copy contains no replacement glyphs and dashboard uses the monitoring integration', () => {
   const login = readFileSync(new URL('../src/pages/auth/Login.tsx', import.meta.url), 'utf8');
   assert.doesNotMatch(login, /\ufffd/);
-  assert.match(readFileSync(new URL('../src/pages/admin/AdminDashboard.tsx', import.meta.url), 'utf8'), /Demonstration dashboard/);
+  assert.match(readFileSync(new URL('../src/pages/admin/AdminDashboard.tsx', import.meta.url), 'utf8'), /MonitoringPage mode="dashboard"/);
 });

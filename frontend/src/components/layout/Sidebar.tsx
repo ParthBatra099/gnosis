@@ -101,14 +101,16 @@ export function Sidebar({
       label: 'Security Events',
       to: '/admin/security-events',
       icon: ShieldCheck,
-      enabled: false,
+      enabled: true,
     },
     {
       label: 'Incidents',
       to: '/admin/incidents',
       icon: AlertTriangle,
-      enabled: false,
+      enabled: true,
     },
+    { label: 'Security timeline', to: '/admin/timeline', icon: ShieldCheck, enabled: true },
+    { label: 'Audit activity', to: '/admin/audit-logs', icon: ShieldCheck, enabled: true },
     {
       label: 'Resources',
       to: '/admin/resources',

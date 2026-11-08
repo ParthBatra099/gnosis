@@ -409,7 +409,7 @@ def test_multiple_high_events_do_not_create_duplicate_incidents(client, db_sessi
     crit_res = db_session.query(Resource).filter_by(name="Master Keys").first()
     token = session_token(db_session, subject=eng_user.id)
 
-    # Trigger 2 CRITICAL security events on same resource
+    # Two qualifying requests in the same bounded detection episode.
     client.get(f"/resources/{crit_res.id}", headers={"Authorization": f"Bearer {token}"})
     client.get(f"/resources/{crit_res.id}", headers={"Authorization": f"Bearer {token}"})
 
@@ -417,7 +417,7 @@ def test_multiple_high_events_do_not_create_duplicate_incidents(client, db_sessi
     assert len(incidents) == 1  # Reuses existing OPEN incident
 
     inc_events = db_session.query(IncidentEvent).filter(IncidentEvent.incident_id == incidents[0].id).all()
-    assert len(inc_events) == 2  # Both security events attached to single incident
+    assert len(inc_events) == 1  # Stage 2 deduplicates the episode and its evidence link.
 
 
 def test_deleting_incident_preserves_security_event(db_session):

@@ -48,7 +48,7 @@ def test_authentication_revision_is_next_additive_head(revision, offline):
     scripts = ScriptDirectory.from_config(config)
     assert revision.revision == "0008_phase2_authentication"
     assert revision.down_revision == "0007_phase2_organization"
-    assert scripts.get_heads() == ["0010_phase2_identity_validation"]
+    assert scripts.get_heads() == ["0012"]
     assert scripts.get_revision("0009_phase2_org_management").down_revision == revision.revision
     assert scripts.get_revision(revision.down_revision).down_revision == "0006_phase_4"
     operations, sql = offline
