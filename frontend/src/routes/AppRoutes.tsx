@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, HashRouter, Routes, Route, Navigate } from 'react-router-dom';
+import type { ReactNode } from 'react';
 
 import { useAuth } from '../hooks/useAuth';
 import { ProtectedRoute } from './ProtectedRoute';
@@ -84,9 +85,11 @@ function SharedLayout() {
    APP ROUTES
    ========================================================= */
 
-export function AppRoutes() {
+export function AppRoutes({ loginElement = <Login />, hashRouting = false }:
+  { loginElement?: ReactNode; hashRouting?: boolean } = {}) {
+  const Router = hashRouting ? HashRouter : BrowserRouter;
   return (
-    <BrowserRouter>
+    <Router>
 
       <Routes>
         <Route path="/identity-unavailable" element={<IdentityUnavailable />} />
@@ -107,7 +110,7 @@ export function AppRoutes() {
 
         <Route
           path="/login"
-          element={<Login />}
+          element={loginElement}
         />
 
 
@@ -225,6 +228,6 @@ export function AppRoutes() {
 
       </Routes>
 
-    </BrowserRouter>
+    </Router>
   );
 }
