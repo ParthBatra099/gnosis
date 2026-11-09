@@ -63,7 +63,7 @@ export function Sidebar({
       label: 'Resources',
       to: '/employee/resources',
       icon: Database,
-      enabled: false,
+      enabled: true,
     },
     {
       label: 'Access Requests',
@@ -113,9 +113,9 @@ export function Sidebar({
     { label: 'Audit activity', to: '/admin/audit-logs', icon: ShieldCheck, enabled: true },
     {
       label: 'Resources',
-      to: '/admin/resources',
+      to: '/employee/resources',
       icon: Database,
-      enabled: false,
+      enabled: true,
     },
   ];
 

@@ -65,3 +65,32 @@ login, and reactivation may require real MFA setup. No fake data or metrics were
 Live PostgreSQL, browser TLS/cookie behavior and end-to-end frontend/backend integration
 remain unverified until an explicit environment is available. Node tests mock HTTP and
 render components; they do not prove browser transport behavior.
+
+## Employee business-record workflow
+
+Open `demo.html#/employee/resources` after demo login (normal application:
+`/employee/resources`). All canonical roles may use the employee resource page;
+this does not grant business-data permissions. Existing admin links also lead to
+this shared page. It loads only `/access/resources/metadata` on mount.
+
+Select a resource and page size, then explicitly click **Request records**. This
+calls `GET /resources/{id}/records?limit=25&offset=0` with browser cookies. GETs do not
+require a CSRF header. Resource listing, selection and page size changes do not
+establish permission or fetch records. Pagination and repeated requests are explicit
+actions that may create new server-side disclosure evidence; there is no automatic
+retry, prefetch, polling or focus-triggered record retrieval.
+
+The screen displays backend-returned values, record classifications, response ID and
+disclosure semantics. APPLICATION_COMPLETE means application processing completed;
+the disclosure ledger does not prove network delivery or human receipt/viewing. No
+total count is inferred. A full page permits a next-page request that may be empty.
+Selection changes, errors and session rejection clear the displayed values. Requests
+already submitted may have been processed even if a late response is discarded.
+
+An approved database must separately contain compatible fictional resources and
+BusinessRecord rows. The identity-only bootstrap does not create them; the frontend
+does not seed or fabricate them. Select an existing same-department non-CRITICAL
+resource for a permitted read, and an existing cross-department resource without
+ownership or a valid read grant for a denied read, subject to current backend policy.
+Admin **Reload current data** refreshes disclosure, detection, risk and incident views.
+No record values, scores, permissions or detection results are synthesized by this UI.

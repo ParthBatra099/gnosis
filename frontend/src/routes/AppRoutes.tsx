@@ -12,6 +12,7 @@ import { Login } from '../pages/auth/Login';
 import { SessionManagement } from '../pages/auth/SessionManagement';
 
 import { EmployeeHome } from '../pages/employee/EmployeeHome';
+import { BusinessRecords } from '../pages/employee/BusinessRecords';
 import { AskGnosis } from '../pages/employee/AskGnosis';
 
 import { AdminDashboard } from '../pages/admin/AdminDashboard';
@@ -149,6 +150,7 @@ export function AppRoutes({ loginElement = <Login />, hashRouting = false }:
         >
 
           {/* Employee Overview */}
+          <Route path="resources" element={<BusinessRecords />} />
 
           <Route
             index
