@@ -7,7 +7,7 @@ from fastapi import HTTPException
 from sqlalchemy import and_, exists, or_, select, true
 from sqlalchemy.orm import Session, aliased
 
-from app.models import AccessRequest, Department, Resource
+from app.models import AccessRequest, Department, Resource, User
 from app.models.audit_event import AuditEvent
 from app.models.incident import Incident
 from app.models.incident_event import IncidentEvent
@@ -15,6 +15,7 @@ from app.models.security_event import SecurityEvent
 from app.models.risk_assessment import MonitoringScope
 from app.security.detection_engine import evaluate_detection_rules
 from app.services import organization_authority as authority
+from app.services.incident_coordination import lock_incident_row
 
 A = authority.AdministrativeAction
 
@@ -27,7 +28,7 @@ def require(decision):
 
 
 @contextmanager
-def mutation_transaction(source: Session):
+def mutation_transaction(source: Session, *, incident=False):
     """Explicit caller transaction on the existing bind; never discard auth's work.
 
     Authentication has already resolved the actor with get_current_user and may
@@ -36,7 +37,15 @@ def mutation_transaction(source: Session):
     Responses must be materialized before closing this session.
     """
     with Session(bind=source.get_bind(), autoflush=False, expire_on_commit=False) as db:
-        with db.begin():
+        with db.begin() as transaction:
+            # Match organization-management's global ascending identity order.
+            # NO KEY UPDATE coordinates identity writes without blocking the
+            # KEY SHARE foreign-key checks of concurrent evidence publication.
+            if incident:
+                db.execute(select(User.id).order_by(User.id).with_for_update(key_share=True)).all()
+                department_ids = db.scalars(select(Department.id).order_by(Department.id)
+                                           .with_for_update(key_share=True)).all()
+                db.info["incident_locked_departments"] = (transaction, frozenset(department_ids))
             yield db
         # Detection never owns commits. Keep observation after the atomic mutation.
         for event in db.info.get("administrative_audits", []):
@@ -142,7 +151,7 @@ def pending_query(db, actor_id):
 
 
 def lock_resource_authority(db, actor_id, resource_id, action):
-    """Identity first, target row lock, then fresh scope decision under both locks."""
+    """Revalidate immutable resource metadata under current identity authority."""
     if resource_id is None:
         return require(authority.revalidate_authority_for_mutation(
             db, actor_id, A.ORGANIZATION_ADMINISTER, authority.OrganizationScope()))
@@ -151,8 +160,7 @@ def lock_resource_authority(db, actor_id, resource_id, action):
         raise HTTPException(404, "Resource not found")
     require(authority.revalidate_authority_for_mutation(
         db, actor_id, action, authority.DepartmentScope(department_id)))
-    department_id = db.scalar(select(Resource.department_id).where(
-        Resource.id == resource_id).with_for_update())
+    department_id = db.scalar(select(Resource.department_id).where(Resource.id == resource_id))
     return require(authority.revalidate_authority_for_mutation(
         db, actor_id, action, authority.DepartmentScope(department_id)))
 
@@ -160,21 +168,20 @@ def lock_resource_authority(db, actor_id, resource_id, action):
 def lock_events(db, actor_id, event_ids):
     events = []
     for event_id in sorted(set(event_ids)):
-        event = db.query(SecurityEvent).filter_by(id=event_id).with_for_update().populate_existing().first()
+        event = db.query(SecurityEvent).filter_by(id=event_id).populate_existing().first()
         if event is None:
             raise HTTPException(404, "SecurityEvent not found")
         lock_resource_authority(db, actor_id, event.resource_id, A.DEPARTMENT_INCIDENT_INVESTIGATE)
         if event.source_audit_id:
-            audit = db.query(AuditEvent).filter_by(id=event.source_audit_id).with_for_update().first()
+            audit = db.query(AuditEvent).filter_by(id=event.source_audit_id).populate_existing().first()
             if audit is None:
                 raise HTTPException(403, "Unresolved evidence scope")
             lock_resource_authority(db, actor_id, audit.resource_id, A.DEPARTMENT_INCIDENT_INVESTIGATE)
         # The event and source resource alone do not describe aggregate evidence.
-        # Hold its immutable scope rows and the actor's existing identity lock,
-        # then revalidate each contributing department using Unit 3's locks.
+        # Event + complete scopes are published atomically, never amended later.
+        # Hold mutable identity/department locks, not immutable evidence locks.
         scope_ids = db.scalars(select(MonitoringScope.department_id).where(
-            MonitoringScope.security_event_id == event.id).order_by(MonitoringScope.id)
-            .with_for_update()).all()
+            MonitoringScope.security_event_id == event.id).order_by(MonitoringScope.id)).all()
         if event.evidence is not None and not global_monitor(db, actor_id):
             if not scope_ids or None in scope_ids:
                 raise HTTPException(403, "Unresolved evidence scope")
@@ -195,7 +202,9 @@ def lock_incident(db, actor_id, incident_id):
     if incident is None:
         raise HTTPException(404, "Incident not found or access unauthorized")
     lock_resource_authority(db, actor_id, incident.resource_id, A.DEPARTMENT_INCIDENT_INVESTIGATE)
-    incident = db.query(Incident).filter_by(id=incident_id).with_for_update().populate_existing().one()
+    incident = lock_incident_row(db, incident_id)
+    if incident is None or incident_query(db, actor_id).filter(Incident.id == incident_id).first() is None:
+        raise HTTPException(404, "Incident not found or access unauthorized")
     lock_resource_authority(db, actor_id, incident.resource_id, A.DEPARTMENT_INCIDENT_INVESTIGATE)
     event_ids = db.scalars(select(IncidentEvent.security_event_id).where(
         IncidentEvent.incident_id == incident.id)).all()

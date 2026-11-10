@@ -288,7 +288,13 @@ def revalidate_authority_for_mutation(session: Session, actor_user_id: str,
             AccessRequest.id == scope.request_id,
         ).with_for_update())
         if resource_id is not None:
-            session.execute(select(Resource.id).where(Resource.id == resource_id).with_for_update()).all()
+            # Resource metadata is immutable in the current application lifecycle.
+            session.execute(select(Resource.id).where(Resource.id == resource_id)).all()
     elif isinstance(scope, DepartmentScope):
-        session.execute(select(Department.id).where(Department.id == scope.department_id).with_for_update()).all()
+        coordination = session.info.get("incident_locked_departments")
+        if coordination and coordination[0] is transaction:
+            if scope.department_id not in coordination[1]:
+                raise RuntimeError("Incident coordination scope changed; abort transaction")
+        else:
+            session.execute(select(Department.id).where(Department.id == scope.department_id).with_for_update()).all()
     return evaluate_authority(session, actor_user_id, action, scope)

@@ -8,9 +8,9 @@ from app.services.risk_service import snapshot, add_scopes, persist_assessment, 
 
 from app.models.audit_event import AuditEvent
 from app.models.incident import Incident
-from app.models.incident_event import IncidentEvent
 from app.models.resource import Resource
 from app.models.security_event import SecurityEvent
+from app.services.incident_coordination import attach_events, lock_incident_row, serialize_escalation
 
 logger = logging.getLogger("gnosis.detection")
 
@@ -20,6 +20,8 @@ def _escalate_security_event_to_incident(db: Session, sec_event: SecurityEvent) 
     if sec_event.severity not in {"HIGH", "CRITICAL"}:
         return
 
+    serialize_escalation(db)
+
     # Look for active OPEN or INVESTIGATING incident matching actor or resource
     query = db.query(Incident).filter(Incident.status.in_(["OPEN", "INVESTIGATING"]))
     if sec_event.resource_id:
@@ -27,7 +29,16 @@ def _escalate_security_event_to_incident(db: Session, sec_event: SecurityEvent) 
     elif sec_event.actor_id:
         query = query.filter(Incident.reporter_id == sec_event.actor_id)
 
-    existing_incident = query.order_by(Incident.created_at.desc()).first()
+    # The advisory lock covers no matching row; the parent lock is shared with
+    # manual writers. A manual status transition while waiting requires a fresh
+    # candidate search, not attachment to a now-resolved incident.
+    while True:
+        existing_incident = query.order_by(Incident.created_at.desc(), Incident.id.desc()).first()
+        if existing_incident is None:
+            break
+        existing_incident = lock_incident_row(db, existing_incident.id)
+        if existing_incident is not None and existing_incident.status in {"OPEN", "INVESTIGATING"}:
+            break
 
     if existing_incident:
         target_incident = existing_incident
@@ -43,21 +54,7 @@ def _escalate_security_event_to_incident(db: Session, sec_event: SecurityEvent) 
         db.add(target_incident)
         db.flush()
 
-    # Avoid duplicate IncidentEvent linkages
-    link_exists = (
-        db.query(IncidentEvent)
-        .filter(
-            IncidentEvent.incident_id == target_incident.id,
-            IncidentEvent.security_event_id == sec_event.id,
-        )
-        .first()
-    )
-    if not link_exists:
-        inc_event = IncidentEvent(
-            incident_id=target_incident.id,
-            security_event_id=sec_event.id,
-        )
-        db.add(inc_event)
+    attach_events(db, target_incident, [sec_event.id])
 
 
 def evaluate_detection_rules(db: Session, audit_event: AuditEvent) -> list[SecurityEvent]:
@@ -79,6 +76,8 @@ def evaluate_disclosure_rules(db: Session, response_id: str) -> list[SecurityEve
 
 def emit(db, *, actor_id, rule, severity, resource_id, audit_id, at, start, threshold, count,
          evidence, departments, response_id=None, session_ref=None):
+    # Acquire before INSERTs/unique-key waits, and retain through the outer commit.
+    serialize_escalation(db)
     bucket = int(at.timestamp()) // (policy.WINDOW_MINUTES * 60)
     # A later denial must not be suppressed by an earlier allowed critical access.
     # Severity transitions are bounded; critical resources retain separate episodes.

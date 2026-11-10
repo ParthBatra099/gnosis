@@ -18,6 +18,7 @@ from app.schemas.console import (
 )
 from app.schemas.monitoring import SecurityEventRead
 from app.services import administrative_access as admin
+from app.services.incident_coordination import attach_events
 
 router = APIRouter()
 
@@ -51,7 +52,7 @@ def create_incident(
     db: Session = Depends(get_db),
 ) -> IncidentRead:
     actor_id = current_user.id
-    with admin.mutation_transaction(db) as tx:
+    with admin.mutation_transaction(db, incident=True) as tx:
         admin.lock_resource_authority(tx, actor_id, payload.resource_id, admin.A.DEPARTMENT_INCIDENT_INVESTIGATE)
         events = admin.lock_events(tx, actor_id, payload.security_event_ids or [])
         admin.verify_assignee(tx, payload.assigned_to_id, payload.resource_id, events)
@@ -60,8 +61,7 @@ def create_incident(
                             resource_id=payload.resource_id)
         tx.add(incident)
         tx.flush()
-        for sec_id in dict.fromkeys(payload.security_event_ids or []):
-            tx.add(IncidentEvent(incident_id=incident.id, security_event_id=sec_id))
+        attach_events(tx, incident, payload.security_event_ids or [])
         admin.append_audit(tx, actor_id=actor_id, resource_id=incident.resource_id,
                            action="INCIDENT_CREATED", reason="MANUAL_INCIDENT_CREATED",
                            context_data={"incident_id": incident.id, "severity": incident.severity})
@@ -130,7 +130,7 @@ def update_incident(
     db: Session = Depends(get_db),
 ) -> IncidentRead:
     actor_id = current_user.id
-    with admin.mutation_transaction(db) as tx:
+    with admin.mutation_transaction(db, incident=True) as tx:
         incident = admin.lock_incident(tx, actor_id, incident_id)
         events = tx.query(SecurityEvent).join(IncidentEvent).filter(IncidentEvent.incident_id == incident.id).all()
         if payload.assigned_to_id is not None:
@@ -163,14 +163,12 @@ def attach_security_events_to_incident(
     db: Session = Depends(get_db),
 ) -> IncidentDetailRead:
     actor_id = current_user.id
-    with admin.mutation_transaction(db) as tx:
+    with admin.mutation_transaction(db, incident=True) as tx:
         incident = admin.lock_incident(tx, actor_id, incident_id)
         events = admin.lock_events(tx, actor_id, payload.security_event_ids)
         # A legacy assignee is provenance, not authority. New assignments are
         # validated on create/update; attaching evidence grants it no access.
-        for sec_id in dict.fromkeys(payload.security_event_ids):
-            if not tx.query(IncidentEvent).filter_by(incident_id=incident.id, security_event_id=sec_id).first():
-                tx.add(IncidentEvent(incident_id=incident.id, security_event_id=sec_id))
+        attach_events(tx, incident, payload.security_event_ids)
         admin.append_audit(tx, actor_id=actor_id, resource_id=incident.resource_id,
                            action="INCIDENT_EVENTS_ATTACHED", reason="INCIDENT_EVIDENCE_ATTACHED",
                            context_data={"incident_id": incident.id, "attached_event_count": len(events)})

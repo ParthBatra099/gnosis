@@ -3,6 +3,7 @@
 No target is inferred from application settings. The caller owns the transaction.
 """
 import hashlib
+import ipaddress
 import json
 from uuid import UUID, uuid5
 
@@ -15,6 +16,19 @@ from app.models import AuditEvent, Department, User
 from app.services.authentication_common import require_transaction
 
 ACTION = "LOCAL_DEMO_BOOTSTRAPPED"
+
+
+class BootstrapValidationError(ValueError):
+    CATEGORIES = {
+        "PASSWORD_POLICY_FAILURE": "Explicit per-user passwords required (12–1024 characters)",
+        "BOOTSTRAP_RECEIPT_MISSING_OR_AMBIGUOUS": "Absent or ambiguous bootstrap provenance",
+    }
+
+    def __init__(self, category):
+        if type(category) is not str or category not in self.CATEGORIES:
+            raise ValueError("Unknown bootstrap diagnostic")
+        super().__init__(self.CATEGORIES[category])
+        self.category = category
 
 
 class DemoContract(BaseModel):
@@ -94,12 +108,25 @@ def verify_target(db, target):
     db.execute(text("SET LOCAL statement_timeout = '5s'"))
     db.execute(text("SET LOCAL lock_timeout = '3s'"))
     row = db.execute(text("SELECT current_database(), current_user, current_schema(), "
-        "d.oid, shobj_description(d.oid, 'pg_database'), inet_server_port() "
+        "d.oid, shobj_description(d.oid, 'pg_database'), inet_server_port(), "
+        "inet_server_addr()::text, pg_get_userbyid(d.datdba) "
         "FROM pg_database d WHERE d.datname=current_database()")).one()
     expected = (target.database, target.database_role, target.schema_name, target.database_oid,
                 "GNOSIS_LOCAL_DISPOSABLE_DEMO:" + str(target.instance_id), target.port)
-    if tuple(row) != expected:
+    actual = tuple(row)
+    if len(actual) != 8 or actual[:6] != expected or actual[7] != "gnosis_demo_owner":
         raise ValueError("Database identity/approval marker mismatch")
+    try:
+        reported = actual[6]
+        if type(reported) is not str or "%" in reported:
+            raise ValueError
+        address = ipaddress.ip_interface(reported)
+        approved = ipaddress.ip_address(target.host)
+        if (not approved.is_loopback or address.version != approved.version
+                or address.ip != approved or address.network.prefixlen != address.max_prefixlen):
+            raise ValueError
+    except ValueError:
+        raise ValueError("Connected server address mismatch") from None
     if db.execute(text("SELECT version_num FROM public.alembic_version")).scalars().all() != ["0012"]:
         raise ValueError("Explicitly prepared migration head 0012 required")
 
@@ -107,7 +134,7 @@ def verify_target(db, target):
 def validate_receipt(db, manifest, target):
     receipts = db.scalars(select(AuditEvent).where(AuditEvent.action == ACTION)).all()
     if len(receipts) != 1:
-        raise ValueError("Absent or ambiguous bootstrap provenance")
+        raise BootstrapValidationError("BOOTSTRAP_RECEIPT_MISSING_OR_AMBIGUOUS")
     event = receipts[0]
     expected = {"manifest_sha256": digest(manifest), "target_sha256": digest(target),
                 "instance_id": str(target.instance_id), "manifest_version": manifest.version}
@@ -143,12 +170,14 @@ def verify_existing(db, manifest, target):
         raise ValueError("Department drift")
 
 
-def bootstrap(db, manifest, target, *, operator, passwords=None):
+def bootstrap(db, manifest, target, *, operator, passwords=None, stage=None):
     """Dry-run unless per-run passwords supplied. No assignments/fake user actor.
 
     Call only after verify_target in the same transaction. CLI serializes bootstrap
     with a PostgreSQL advisory transaction lock. Tests use isolated SQLite only.
     """
+    if stage is not None:
+        stage("IDENTITY_INSPECTION")
     require_transaction(db)
     if not operator or len(operator) > 200:
         raise ValueError("Explicit operator provenance required")
@@ -156,16 +185,26 @@ def bootstrap(db, manifest, target, *, operator, passwords=None):
         raise ValueError("Non-empty target; use read-only verify-existing")
     if passwords is None:
         return
+    if stage is not None:
+        stage("PASSWORD_VALIDATION")
     if set(passwords) != {str(u.id) for u in manifest.users} or any(
             not isinstance(p, str) or not 12 <= len(p) <= 1024 for p in passwords.values()):
-        raise ValueError("Explicit per-user passwords required (12–1024 characters)")
+        raise BootstrapValidationError("PASSWORD_POLICY_FAILURE")
+    if stage is not None:
+        stage("DEPARTMENT_INSERTION")
     db.add_all(Department(id=str(d.id), name=d.name, description="Fictional local demonstration")
                for d in manifest.departments)
     db.flush()
+    if stage is not None:
+        stage("PASSWORD_HASHING")
     db.add_all(User(id=str(u.id), name=u.name, email=u.email, password_hash=hash_password(passwords[str(u.id)]),
                     role="EMPLOYEE", organization_role=u.organization_role,
                     department_id=str(u.department_id), active=True) for u in manifest.users)
+    if stage is not None:
+        stage("USER_INSERTION")
     db.flush()
+    if stage is not None:
+        stage("AUDIT_INSERTION")
     db.add(AuditEvent(id=receipt_id(target), actor_id=None, action=ACTION, outcome="ALLOW",
         reason="LOCAL_DEMO_OPERATOR_BOOTSTRAP", context_data={"manifest_sha256": digest(manifest),
         "target_sha256": digest(target), "instance_id": str(target.instance_id),

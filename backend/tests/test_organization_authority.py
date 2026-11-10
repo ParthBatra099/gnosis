@@ -414,7 +414,8 @@ def test_request_revalidation_locks_target_rows_in_postgresql_sql_without_connec
         event.remove(engine, "before_cursor_execute", observe)
     assert any("update users set organization_role=users.organization_role" in sql for sql in compiled)
     assert any("from access_requests" in sql and "for update" in sql for sql in compiled)
-    assert any("from resources" in sql and "for update" in sql for sql in compiled)
+    assert any("from resources" in sql for sql in compiled)
+    assert not any("from resources" in sql and "for update" in sql for sql in compiled)
 
 
 def test_authority_does_not_claim_authentication_or_mfa_assurance(engine, actors):

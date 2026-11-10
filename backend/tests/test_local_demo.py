@@ -147,9 +147,9 @@ def test_manifest_validation(mutation):
 def test_launcher_flags_and_example_manifest():
     from scripts.run_local_demo import parser
     from pathlib import Path
-    with pytest.raises(SystemExit):
+    with pytest.raises(ValueError):
         parser().parse_args(["serve", "--target", "fictional.json", "--manifest", "fictional.json"])
-    with pytest.raises(SystemExit):
+    with pytest.raises(ValueError):
         parser().parse_args(["serve", "--local-demo", "--ack-password-only-demo", "--target", "fictional.json",
                              "--manifest", "fictional.json", "--workers", "2"])
     example = boot.DemoManifest.model_validate_json((Path(__file__).parents[1] / "demo" / "identities.example.json").read_text())
@@ -173,15 +173,21 @@ def test_nonlocal_or_insecure_server_requests_rejected(demo, base, peer):
         assert remote.get("/health").status_code == 403
 
 
-@pytest.mark.parametrize("mismatch", ["database", "role", "schema", "oid", "marker", "port", "revision"])
+@pytest.mark.parametrize("mismatch", [None, "bare-address", "database", "role", "schema", "oid", "marker",
+    "port", "revision", "owner", "address", "ipv6", "missing-address", "malformed-address"])
 def test_postgres_identity_probe_contract_without_postgres(mismatch):
     """SQL response adapter only; does not claim live PostgreSQL verification."""
     from sqlalchemy.engine import URL
     _, target = contracts()
     row = [target.database, target.database_role, "public", target.database_oid,
-           "GNOSIS_LOCAL_DISPOSABLE_DEMO:" + str(target.instance_id), target.port]
-    if mismatch != "revision":
-        row[["database", "role", "schema", "oid", "marker", "port"].index(mismatch)] = "WRONG"
+           "GNOSIS_LOCAL_DISPOSABLE_DEMO:" + str(target.instance_id), target.port,
+           "127.0.0.1/32", "gnosis_demo_owner"]
+    if mismatch in ("database", "role", "schema", "oid", "marker", "port", "owner"):
+        row[{"database": 0, "role": 1, "schema": 2, "oid": 3, "marker": 4, "port": 5, "owner": 7}[mismatch]] = "WRONG"
+    addresses = {"bare-address": "127.0.0.1", "address": "127.0.0.2/32", "ipv6": "::1/128",
+                 "missing-address": None, "malformed-address": "not-an-address"}
+    if mismatch in addresses:
+        row[6] = addresses[mismatch]
     class Result:
         def one(self):
             return tuple(row)
@@ -197,8 +203,321 @@ def test_postgres_identity_probe_contract_without_postgres(mismatch):
             return Bind()
         def execute(self, statement):
             return Result()
-    with pytest.raises(ValueError):
+    if mismatch in (None, "bare-address"):
         boot.verify_target(Database(), target)
+    else:
+        with pytest.raises(ValueError):
+            boot.verify_target(Database(), target)
+
+
+def test_flat_descriptor_projection_only():
+    _, target = contracts()
+    wrapped = dict(target=target.model_dump(mode="json"), hostaddr="127.0.0.1",
+                   migration_owner_role="gnosis_demo_owner", application_role=target.database_role)
+    with pytest.raises(ValueError):
+        boot.DemoTarget.model_validate(wrapped)
+    projected = boot.DemoTarget.model_validate(wrapped["target"])
+    assert projected == target
+    assert projected.model_dump(mode="json") == wrapped["target"]
+
+
+@pytest.mark.parametrize("variable", ["PGHOSTADDR", "PGHOST", "PGSERVICE", "PGSERVICEFILE", "PGPORT", "PGDATABASE"])
+def test_bootstrap_rejects_ambient_before_prompt_or_engine(monkeypatch, variable):
+    from scripts import run_local_demo as launcher
+    import os
+    for name in list(os.environ):
+        if name.upper().startswith("PG"):
+            monkeypatch.delenv(name)
+    _, target = contracts()
+    monkeypatch.setenv(variable, "SYNTHETIC-DO-NOT-DISPLAY")
+    with pytest.raises(ValueError) as error:
+        launcher.validate_bootstrap_network(target)
+    assert "SYNTHETIC" not in str(error.value)
+
+
+@pytest.mark.parametrize("change", [None, "host", "hostaddr", "port", "dbname", "user", "service", "servicefile", "positional"])
+def test_bootstrap_connection_parameters(monkeypatch, change):
+    from scripts import run_local_demo as launcher
+    import os
+    for name in list(os.environ):
+        if name.upper().startswith("PG"):
+            monkeypatch.delenv(name)
+    _, target = contracts()
+    params = dict(host="127.0.0.1", hostaddr="127.0.0.1", port=5432,
+                  dbname=target.database, user=target.database_role)
+    if change and change != "positional":
+        params[change] = "WRONG"
+    args = ["opaque-dsn"] if change == "positional" else []
+    if change is None:
+        launcher.guard_demo_connection(target, args, params)
+    else:
+        with pytest.raises(ValueError):
+            launcher.guard_demo_connection(target, args, params)
+
+
+@pytest.mark.parametrize("failure", ["warning", "eof", "os", "nonterminal"])
+def test_bootstrap_hidden_input_fails_closed(monkeypatch, failure):
+    from scripts import run_local_demo as launcher
+    import warnings
+    monkeypatch.setattr(launcher.sys.stdin, "isatty", lambda: failure != "nonterminal")
+    calls = []
+    def unavailable(prompt):
+        calls.append(prompt)
+        if failure == "warning":
+            warnings.warn("SYNTHETIC-SECRET", launcher.getpass.GetPassWarning)
+            pytest.fail("Warning must abort before echoed fallback")
+        raise EOFError("SYNTHETIC-SECRET") if failure == "eof" else OSError("SYNTHETIC-SECRET")
+    monkeypatch.setattr(launcher.getpass, "getpass", unavailable)
+    with pytest.raises(ValueError) as error:
+        launcher.password_prompt("Hidden password: ")
+    assert "SYNTHETIC" not in str(error.value)
+    assert len(calls) == (0 if failure == "nonterminal" else 1)
+
+
+def test_bootstrap_environment_guard_precedes_password_and_engine(monkeypatch):
+    from scripts import run_local_demo as launcher
+    from pathlib import Path
+    import json
+    import sqlalchemy
+    manifest, target = contracts()
+    monkeypatch.setattr(launcher.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(launcher, "install_demo_configuration", lambda: None)
+    def read(path, **kwargs):
+        return json.dumps((manifest if path.name == "manifest.json" else target).model_dump(mode="json"))
+    monkeypatch.setattr(Path, "read_text", read)
+    monkeypatch.setenv("PGHOSTADDR", "SYNTHETIC")
+    monkeypatch.setattr(launcher, "password_prompt", lambda *a: pytest.fail("Password requested before rejection"))
+    monkeypatch.setattr(sqlalchemy, "create_engine", lambda *a, **k: pytest.fail("Engine created before rejection"))
+    with pytest.raises(ValueError, match="ambient"):
+        launcher.main(["bootstrap", "--local-demo", "--ack-password-only-demo", "--target", "flat.json",
+                       "--manifest", "manifest.json", "--operator", "FICTIONAL-TEST-OPERATOR"])
+
+
+def test_bootstrap_hidden_input_success(monkeypatch):
+    from scripts import run_local_demo as launcher
+    monkeypatch.setattr(launcher.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(launcher.getpass, "getpass", lambda prompt: PASSWORD)
+    assert launcher.password_prompt("Hidden password: ") == PASSWORD
+
+
+@pytest.fixture
+def bootstrap_diagnostics(monkeypatch):
+    """Real bootstrap/SQLite transactions; mocked transport, no PG connection."""
+    from scripts import run_local_demo as launcher
+    from pathlib import Path
+    from types import SimpleNamespace
+    import json
+    import sqlalchemy
+    import sqlalchemy.orm
+    bind = create_engine("sqlite:///:memory:", poolclass=StaticPool)
+    @event.listens_for(bind, "connect")
+    def foreign_keys(connection, record):
+        connection.execute("PRAGMA foreign_keys=ON")
+    Base.metadata.create_all(bind)
+    manifest, target = contracts()
+    state = dict(disposal_failure=False, commit_failure=False, commits=0, passwords=PASSWORD)
+    class LocalSession(Session):
+        def __init__(self, ignored_bind, **kwargs):
+            super().__init__(bind, **kwargs)
+        def execute(self, statement, *args, **kwargs):
+            if str(statement) == "SELECT pg_advisory_xact_lock(1196314447)":
+                return None  # PostgreSQL coordination only, not simulated by SQLite.
+            return super().execute(statement, *args, **kwargs)
+    @event.listens_for(LocalSession, "before_commit")
+    def before_commit(db):
+        if state["commit_failure"] and state["commits"] == 1:
+            raise RuntimeError("SYNTHETIC-SECRET-COMMIT")
+    @event.listens_for(LocalSession, "after_commit")
+    def after_commit(db):
+        state["commits"] += 1
+    def dispose():
+        if state["disposal_failure"]:
+            raise OSError("SYNTHETIC-SECRET-DISPOSAL")
+    fake_engine = SimpleNamespace(dispose=dispose)
+    original_listens_for = sqlalchemy.event.listens_for
+    def listen(target_object, *args, **kwargs):
+        if target_object is fake_engine:
+            return lambda callback: callback
+        return original_listens_for(target_object, *args, **kwargs)
+    monkeypatch.setattr(sqlalchemy.event, "listens_for", listen)
+    monkeypatch.setattr(sqlalchemy, "create_engine", lambda *a, **k: fake_engine)
+    monkeypatch.setattr(sqlalchemy.orm, "Session", LocalSession)
+    monkeypatch.setattr(launcher, "install_demo_configuration", lambda: None)
+    monkeypatch.setattr(launcher, "validate_bootstrap_network", lambda target: None)
+    monkeypatch.setattr(launcher.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(launcher, "password_prompt", lambda prompt: state["passwords"])
+    monkeypatch.setattr(boot, "verify_target", lambda db, target: None)
+    def read(path, **kwargs):
+        return json.dumps((manifest if path.name == "manifest.json" else target).model_dump(mode="json"))
+    monkeypatch.setattr(Path, "read_text", read)
+    args = ["bootstrap", "--local-demo", "--ack-password-only-demo", "--target", "flat.json",
+            "--manifest", "manifest.json", "--operator", "FICTIONAL-OPERATOR",
+            "--apply-confirmation", "APPLY:" + str(target.instance_id)]
+    yield launcher, args, bind, state
+    bind.dispose()
+
+
+@pytest.mark.parametrize("password", ["short", "x" * 1025])
+def test_bootstrap_diagnostic_password_policy(bootstrap_diagnostics, capsys, password):
+    import json
+    launcher, args, bind, state = bootstrap_diagnostics
+    state["passwords"] = password
+    assert launcher.run(args) == 1
+    captured = capsys.readouterr()
+    diagnostic = json.loads(captured.err)
+    assert diagnostic == dict(stage="PASSWORD_VALIDATION", exception="BootstrapValidationError",
+                             sqlstate=None, category="PASSWORD_POLICY_FAILURE")
+    assert captured.out == ""
+    assert password not in captured.err
+    with Session(bind) as db:
+        assert db.query(User).count() == db.query(boot.Department).count() == db.query(AuditEvent).count() == 0
+
+
+@pytest.mark.parametrize("model,stage", [(boot.Department, "DEPARTMENT_INSERTION"),
+    (User, "USER_INSERTION"), (AuditEvent, "AUDIT_INSERTION")])
+def test_bootstrap_diagnostic_flush_rollback(bootstrap_diagnostics, capsys, model, stage):
+    import json
+    launcher, args, bind, _ = bootstrap_diagnostics
+    def fail(*args):
+        raise RuntimeError("SYNTHETIC-SECRET-FLUSH")
+    event.listen(model, "before_insert", fail)
+    try:
+        assert launcher.run(args) == 1
+    finally:
+        event.remove(model, "before_insert", fail)
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert json.loads(captured.err)["stage"] == stage
+    assert "SYNTHETIC" not in captured.err
+    with Session(bind) as db:
+        assert db.query(User).count() == db.query(boot.Department).count() == db.query(AuditEvent).count() == 0
+
+
+def test_empty_verify_existing_sanitized(bootstrap_diagnostics, capsys):
+    import json
+    launcher, args, _, _ = bootstrap_diagnostics
+    args[0] = "verify-existing"
+    args = args[:args.index("--apply-confirmation")]
+    assert launcher.run(args) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert json.loads(captured.err) == dict(stage="RECEIPT_VERIFICATION", exception="BootstrapValidationError",
+        sqlstate=None, category="BOOTSTRAP_RECEIPT_MISSING_OR_AMBIGUOUS")
+
+
+def test_bootstrap_primary_failure_survives_disposal(bootstrap_diagnostics, capsys):
+    import json
+    launcher, args, _, state = bootstrap_diagnostics
+    state.update(disposal_failure=True, passwords="short")
+    assert launcher.run(args) == 1
+    captured = capsys.readouterr()
+    diagnostics = [json.loads(line) for line in captured.err.splitlines()]
+    assert [d["stage"] for d in diagnostics] == ["PASSWORD_VALIDATION", "ENGINE_DISPOSAL"]
+    assert diagnostics[0]["category"] == "PASSWORD_POLICY_FAILURE"
+    assert diagnostics[1]["exception"] == "OSError"
+    assert "SYNTHETIC" not in captured.err
+    assert captured.out == ""
+
+
+def test_bootstrap_hash_failure_rolls_back_departments(bootstrap_diagnostics, monkeypatch, capsys):
+    import json
+    launcher, args, bind, _ = bootstrap_diagnostics
+    def fail(password):
+        raise RuntimeError("SYNTHETIC-HASH-SECRET")
+    monkeypatch.setattr(boot, "hash_password", fail)
+    assert launcher.run(args) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert json.loads(captured.err)["stage"] == "PASSWORD_HASHING"
+    assert "SYNTHETIC" not in captured.err
+    with Session(bind) as db:
+        assert db.query(User).count() == db.query(boot.Department).count() == db.query(AuditEvent).count() == 0
+
+
+def test_bootstrap_disposal_only_failure(bootstrap_diagnostics, capsys):
+    import json
+    launcher, args, bind, state = bootstrap_diagnostics
+    state["disposal_failure"] = True
+    assert launcher.run(args) == 1
+    captured = capsys.readouterr()
+    assert captured.out == "Demo bootstrap APPLIED\n"  # Commit already succeeded; never retry.
+    assert json.loads(captured.err) == dict(stage="ENGINE_DISPOSAL", exception="OSError",
+                                           sqlstate=None, category="CLEANUP_FAILURE")
+    assert state["commits"] == 2
+    with Session(bind) as db:
+        assert db.query(User).count() == 3
+        assert db.query(AuditEvent).count() == 1
+
+
+def test_ambiguous_receipt_diagnostic():
+    from scripts import run_local_demo as launcher
+    from unittest.mock import Mock
+    manifest, target = contracts()
+    db = Mock()
+    db.scalars.return_value.all.return_value = [object(), object()]
+    with pytest.raises(boot.BootstrapValidationError) as caught:
+        boot.verify_existing(db, manifest, target)
+    progress = launcher.Progress()
+    progress.set("RECEIPT_VERIFICATION")
+    assert launcher.failure_diagnostic(progress, caught.value)["category"] == "BOOTSTRAP_RECEIPT_MISSING_OR_AMBIGUOUS"
+
+
+@pytest.mark.parametrize("failure", [False, True])
+def test_bootstrap_commit_before_success(bootstrap_diagnostics, capsys, failure):
+    import json
+    launcher, args, bind, state = bootstrap_diagnostics
+    state["commit_failure"] = failure
+    assert launcher.run(args) == (1 if failure else 0)
+    captured = capsys.readouterr()
+    if failure:
+        assert captured.out == ""
+        assert json.loads(captured.err)["stage"] == "APPLY_COMMIT"
+        assert state["commits"] == 1
+    else:
+        assert captured.err == ""
+        assert captured.out == "Demo bootstrap APPLIED\n"
+        assert state["commits"] == 2
+    with Session(bind) as db:
+        assert db.query(User).count() == (0 if failure else 3)
+        assert db.query(boot.Department).count() == (0 if failure else 2)
+        assert db.query(AuditEvent).count() == (0 if failure else 1)
+
+
+@pytest.mark.parametrize("kind", ["ordinary", "custom-name", "spoof", "driver", "wrapped", "unknown-code"])
+def test_bootstrap_diagnostic_redaction_and_sqlstate(kind):
+    from scripts import run_local_demo as launcher
+    from sqlalchemy.exc import OperationalError
+    import psycopg
+    import json
+    secret = "SYNTHETIC_PASSWORD_postgresql://user:secret@host/private_HASH"
+    if kind == "ordinary":
+        error = ValueError(secret)
+    elif kind == "custom-name":
+        error = type(secret, (Exception,), {})(secret)
+    elif kind == "spoof":
+        error = ValueError(secret)
+        error.sqlstate = "42501"
+    elif kind == "unknown-code":
+        error = psycopg.OperationalError(secret)
+        error.sqlstate = "SECRT"
+    else:
+        error = psycopg.errors.InsufficientPrivilege(secret)
+        if kind == "wrapped":
+            error = OperationalError(secret, {"password": secret}, error)
+    result = launcher.failure_diagnostic(launcher.Progress(), error)
+    assert result["sqlstate"] == ("42501" if kind in ("driver", "wrapped") else None)
+    assert result["exception"] == ("Exception" if kind == "custom-name" else type(error).__name__)
+    assert "SYNTHETIC" not in json.dumps(result)
+    assert "SECRT" not in json.dumps(result)
+
+
+def test_bootstrap_bad_cli_does_not_echo_input(capsys):
+    from scripts import run_local_demo as launcher
+    assert launcher.run(["SYNTHETIC_SECRET_postgresql://credential"]) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "SYNTHETIC" not in captured.err
+    assert "Traceback" not in captured.err
 
 
 @pytest.mark.parametrize("who", ["super", "admin", "employee"])

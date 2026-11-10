@@ -399,8 +399,11 @@ def test_executed_mutations_lock_targets_with_postgresql_for_update(world):
         assert client.patch("/console/incidents/i-hr", json={"status": "INVESTIGATING"}, headers=headers(db, "admin")).status_code == 200
     finally:
         event.remove(Session, "do_orm_execute", capture)
-    for table in ("access_requests", "resources", "access_grants", "incidents", "security_events", "audit_events", "departments"):
+    for table in ("access_requests", "access_grants", "incidents"):
         assert any(f"FROM {table}" in statement and statement.endswith("FOR UPDATE") for statement in locked_sql), table
+    assert any("FROM departments ORDER BY departments.id FOR NO KEY UPDATE" in statement for statement in locked_sql)
+    for table in ("resources", "security_events", "audit_events", "monitoring_scopes"):
+        assert not any(f"FROM {table}" in statement for statement in locked_sql), table
 
 
 def test_ai_http_prompt_claims_cannot_expand_scope(world):
