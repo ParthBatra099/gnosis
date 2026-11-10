@@ -92,7 +92,7 @@ export function Topbar({
               </span>
 
               <span className="gnosis-topbar-user-role">
-                {user.role}
+                {user.organization_role || 'Identity unavailable'}
               </span>
 
             </div>

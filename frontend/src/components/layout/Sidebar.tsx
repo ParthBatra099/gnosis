@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 
 import { useAuth } from '../../hooks/useAuth';
+import { canonicalRole, isAdministrator } from '../../utils/roles';
 
 
 interface SidebarProps {
@@ -38,8 +39,7 @@ export function Sidebar({
 
   const { user, logout } = useAuth();
 
-  const isAdmin =
-    user?.role?.toUpperCase() === 'ADMIN';
+  const isAdmin = isAdministrator(user);
 
 
   /* =====================================================
@@ -63,7 +63,7 @@ export function Sidebar({
       label: 'Resources',
       to: '/employee/resources',
       icon: Database,
-      enabled: false,
+      enabled: true,
     },
     {
       label: 'Access Requests',
@@ -101,33 +101,36 @@ export function Sidebar({
       label: 'Security Events',
       to: '/admin/security-events',
       icon: ShieldCheck,
-      enabled: false,
+      enabled: true,
     },
     {
       label: 'Incidents',
       to: '/admin/incidents',
       icon: AlertTriangle,
-      enabled: false,
+      enabled: true,
     },
-    {
-      label: 'Users',
-      to: '/admin/users',
-      icon: Users,
-      enabled: false,
-    },
+    { label: 'Security timeline', to: '/admin/timeline', icon: ShieldCheck, enabled: true },
+    { label: 'Audit activity', to: '/admin/audit-logs', icon: ShieldCheck, enabled: true },
     {
       label: 'Resources',
-      to: '/admin/resources',
+      to: '/employee/resources',
       icon: Database,
-      enabled: false,
+      enabled: true,
     },
   ];
 
 
-  const navItems =
-    isAdmin
-      ? adminNavItems
-      : employeeNavItems;
+  const organizationItems: NavItem[] = canonicalRole(user) === 'SUPER_ADMIN'
+    ? [ { label: 'Organization departments', to: '/admin/departments', icon: Users, enabled: true },
+        { label: 'Organization identities', to: '/admin/employees', icon: Users, enabled: true },
+        { label: 'Admin assignments', to: '/admin/assignments', icon: ShieldCheck, enabled: true } ]
+    : [{ label: 'Assigned departments', to: '/admin/departments', icon: Users, enabled: true },
+       { label: 'Department employees', to: '/admin/employees', icon: Users, enabled: true }];
+  const navItems = !canonicalRole(user) ? [] : isAdmin
+    ? [...adminNavItems, ...organizationItems,
+        { label: 'My employee workspace', to: '/employee', icon: LayoutDashboard, enabled: true },
+        { label: 'My access requests', to: '/employee/access-requests', icon: KeyRound, enabled: true }]
+    : employeeNavItems;
 
 
   return (
@@ -191,7 +194,7 @@ export function Sidebar({
           aria-label="Main Navigation"
         >
 
-          {navItems.map((item) => {
+          {[...navItems, ...(canonicalRole(user) ? [{ label: 'My sessions', to: '/sessions', icon: ShieldCheck, enabled: true }] : [])].map((item) => {
 
             const Icon = item.icon;
 
@@ -281,7 +284,7 @@ export function Sidebar({
                 </span>
 
                 <span className="gnosis-sidebar-role-tag">
-                  {user.role}
+                  {canonicalRole(user) || 'Identity unavailable'}
                 </span>
 
               </div>

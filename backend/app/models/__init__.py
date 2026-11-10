@@ -9,9 +9,20 @@ from app.models.audit_event import AuditEvent
 from app.models.security_event import SecurityEvent
 from app.models.incident import Incident
 from app.models.incident_event import IncidentEvent
+from app.models.department_admin_assignment import DepartmentAdminAssignment
+from app.models.data_disclosure import BusinessRecord, DataDisclosure
+from app.models.risk_assessment import RiskAssessment, MonitoringScope
+from app.models.authentication import (
+    UserAuthenticationState, MFACredential, AuthenticationChallenge,
+    AuthenticationSession, RecoveryCode, AuthenticationRateLimit,
+)
 
 __all__ = [
     "Base",
+    "RiskAssessment",
+    "MonitoringScope",
+    "BusinessRecord",
+    "DataDisclosure",
     "Department",
     "User",
     "Resource",
@@ -22,4 +33,11 @@ __all__ = [
     "SecurityEvent",
     "Incident",
     "IncidentEvent",
+    "DepartmentAdminAssignment",
+    "UserAuthenticationState",
+    "MFACredential",
+    "AuthenticationChallenge",
+    "AuthenticationSession",
+    "RecoveryCode",
+    "AuthenticationRateLimit",
 ]

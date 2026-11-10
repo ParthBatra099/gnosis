@@ -1,20 +1,18 @@
 import type { UserResponse } from '../types/api';
+import type { OrganizationRole } from '../types/auth';
 
-export function isAdminOrSecurity(user: UserResponse | null): boolean {
-  if (!user) return false;
-  const role = user.role.toLowerCase();
-  return role === 'admin' || role === 'security_officer';
+export function canonicalRole(user: UserResponse | null): OrganizationRole | null {
+  const role = user?.organization_role;
+  return role === 'SUPER_ADMIN' || role === 'DEPARTMENT_ADMIN' || role === 'EMPLOYEE' ? role : null;
 }
-
-export function isManagerOrEmployee(user: UserResponse | null): boolean {
-  if (!user) return false;
-  const role = user.role.toLowerCase();
-  return role === 'manager' || role === 'employee';
+export function isAdministrator(user: UserResponse | null): boolean {
+  return ['SUPER_ADMIN', 'DEPARTMENT_ADMIN'].includes(canonicalRole(user) || '');
 }
-
+export function canPresentRoute(user: UserResponse | null, allowedRoles?: OrganizationRole[]): boolean {
+  const role = canonicalRole(user);
+  return role !== null && (!allowedRoles?.length || allowedRoles.includes(role));
+}
 export function getDefaultRouteForUser(user: UserResponse | null): string {
-  if (isAdminOrSecurity(user)) {
-    return '/admin/dashboard';
-  }
-  return '/employee/dashboard';
+  if (!canonicalRole(user)) return '/identity-unavailable';
+  return isAdministrator(user) ? '/admin' : '/employee';
 }

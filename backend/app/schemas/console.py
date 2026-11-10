@@ -41,6 +41,8 @@ class IncidentRead(BaseModel):
 
 class IncidentDetailRead(IncidentRead):
     security_events: list[SecurityEventRead] = Field(default_factory=list)
+    history: list[dict] = Field(default_factory=list)
+    detection_evidence: list[dict] = Field(default_factory=list)
 
 
 class DashboardSummaryRead(BaseModel):

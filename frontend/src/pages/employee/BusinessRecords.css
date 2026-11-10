@@ -1,0 +1,31 @@
+.business-records { color: #20313d; text-align: left; font-size: 14px; line-height: 1.65; }
+.business-records-heading, .business-records-result-heading { display: flex; justify-content: space-between; align-items: start; gap: 24px; margin-bottom: 24px; }
+.business-records-kicker { color: #537468; font-size: 10px; letter-spacing: 1.7px; font-weight: 700; }
+.business-records h1 { display: flex; align-items: center; gap: 12px; color: #172536; font-size: 28px; margin: 10px 0; letter-spacing: -.7px; }
+.business-records h2 { color: #20313d; font-size: 19px; margin: 0 0 12px; letter-spacing: -.2px; }
+.business-records h3 { color: #20313d; font-size: 14px; margin: 0; }
+.business-records-heading p { max-width: 680px; }
+.business-records button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 15px; border: 1px solid #cddad3; border-radius: 6px; background: #fff; color: #274d40; font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.business-records button:disabled { opacity: .5; cursor: not-allowed; }
+.business-records :is(button, select):focus-visible { outline: 3px solid #82b09a; outline-offset: 3px; }
+.business-records-notice, .business-records-error { border: 1px solid #d5dfd8; border-radius: 8px; padding: 16px; margin-bottom: 20px; background: #edf3ef; font-size: 12px; }
+.business-records-error { background: #fff2ef; color: #883724; border-color: #e5b5aa; }
+.business-records-controls { display: flex; align-items: end; flex-wrap: wrap; gap: 16px; padding: 20px; border: 1px solid #dce4df; background: #fff; border-radius: 10px; margin-bottom: 24px; }
+.business-records-controls label { display: grid; gap: 8px; font-size: 12px; font-weight: 600; flex: 1; min-width: 160px; }
+.business-records-controls label:first-child { flex: 3; min-width: min(260px, 100%); }
+.business-records-controls select { width: 100%; min-width: 0; padding: 10px; color: #20313d; background: #fff; border: 1px solid #cbd8d0; border-radius: 5px; font: inherit; }
+.business-records-controls button[type=submit] { background: #284e40; color: #fff; }
+.business-records-resource, .business-records-results { padding: 24px; border-radius: 10px; background: #fff; border: 1px solid #dce4df; margin-bottom: 24px; }
+.business-records dl { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 8px 16px; margin: 18px 0; font-size: 12px; }
+.business-records dt { color: #61756c; font-weight: 600; }
+.business-records dd { margin: 0; overflow-wrap: anywhere; }
+.business-records-result-heading { margin-bottom: 8px; align-items: center; }
+.business-records-result-heading > span, .business-records-card header span { background: #eaf2ec; border-radius: 5px; padding: 4px 9px; font-size: 11px; white-space: nowrap; }
+.business-records-semantics, .business-records-footer { font-size: 12px; color: #5a6b63; margin: 16px 0; }
+.business-records-list { display: grid; gap: 16px; margin: 20px 0; }
+.business-records-card { border: 1px solid #e0e7e2; padding: 16px; border-radius: 8px; min-width: 0; }
+.business-records-card header { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.business-records-card p { font-size: 11px; color: #5c6e64; overflow-wrap: anywhere; }
+.business-records-card pre { max-height: 400px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 16px; border-radius: 6px; background: #f4f7f4; color: #20313d; font-size: 12px; text-align: left; }
+.business-records-pagination { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+@media (max-width: 680px) { .business-records-heading { flex-direction: column; gap: 12px; } .business-records h1 { font-size: 24px; } .business-records-resource, .business-records-results, .business-records-controls { padding: 16px; } .business-records dl { grid-template-columns: 1fr; gap: 4px; } .business-records dd { margin-bottom: 10px; } .business-records-result-heading { align-items: start; flex-direction: column; gap: 8px; } }

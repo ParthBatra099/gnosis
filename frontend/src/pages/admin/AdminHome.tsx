@@ -26,7 +26,7 @@ export function AdminHome() {
             <div>
               <span className="text-slate-500 block text-[10px] uppercase">Role</span>
               <span className="inline-block px-2 py-0.5 mt-1 text-[10px] rounded bg-purple-500/10 border border-purple-500/30 text-purple-400 uppercase font-semibold">
-                {user.role}
+                {user.organization_role || 'Identity unavailable'}
               </span>
             </div>
           </div>

@@ -6,10 +6,12 @@ from sqlalchemy.pool import StaticPool
 
 from app.ai import tools
 from app.core.database import Base, get_db
-from app.core.security import create_access_token, hash_password
+from app.core.security import hash_password
+from tests.authentication_support import session_token, browser_post
 from app.main import app
 from app.models.audit_event import AuditEvent
 from app.models.department import Department
+from app.models.department_admin_assignment import DepartmentAdminAssignment
 from app.models.incident import Incident
 from app.models.incident_event import IncidentEvent
 from app.models.resource import Resource
@@ -40,6 +42,7 @@ def db_session():
         email="owner@gnosis.com",
         password_hash=hash_password("Pass123!"),
         role="EMPLOYEE",
+        organization_role="EMPLOYEE",
         department_id=dept.id,
         active=True,
     )
@@ -48,10 +51,16 @@ def db_session():
         email="unauth@gnosis.com",
         password_hash=hash_password("Pass123!"),
         role="EMPLOYEE",
+        organization_role="EMPLOYEE",
         department_id=dept.id,
         active=True,
     )
+    # Explicit administrative identity; resource ownership is not the authority.
+    owner.organization_role = "DEPARTMENT_ADMIN"
+    unauth_user.organization_role = "EMPLOYEE"
     session.add_all([owner, unauth_user])
+    session.commit()
+    session.add(DepartmentAdminAssignment(user_id=owner.id, department_id=dept.id, assigned_by=owner.id))
     session.commit()
 
     # Seed resource owned by owner
@@ -104,7 +113,7 @@ def client(db_session):
             pass
 
     app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app, raise_server_exceptions=False) as c:
+    with TestClient(app, raise_server_exceptions=False, base_url="https://testserver", client=("127.0.0.1", 50000)) as c:
         yield c
     app.dependency_overrides.clear()
 
@@ -118,7 +127,7 @@ def test_unauthenticated_request_returns_401(client):
 def test_authenticated_investigator_request_succeeds(client, db_session):
     """2. Authenticated request succeeds with HTTP 200."""
     owner = db_session.query(User).filter_by(email="owner@gnosis.com").first()
-    token = create_access_token(subject=owner.id)
+    token = session_token(db_session, subject=owner.id)
 
     resp = client.post(
         "/ai/investigate",
@@ -133,7 +142,7 @@ def test_authenticated_investigator_request_succeeds(client, db_session):
 def test_supported_intents_detected(client, db_session):
     """3. Supported intents (access denial, security activity, incidents) are correctly parsed."""
     owner = db_session.query(User).filter_by(email="owner@gnosis.com").first()
-    token = create_access_token(subject=owner.id)
+    token = session_token(db_session, subject=owner.id)
 
     r1 = client.post(
         "/ai/investigate",
@@ -163,7 +172,7 @@ def test_supported_intents_detected(client, db_session):
 def test_unsupported_question_returns_structured_unknown_intent(client, db_session):
     """4. Questions outside known intents return a structured UNKNOWN intent response."""
     owner = db_session.query(User).filter_by(email="owner@gnosis.com").first()
-    token = create_access_token(subject=owner.id)
+    token = session_token(db_session, subject=owner.id)
 
     resp = client.post(
         "/ai/investigate",
@@ -180,7 +189,7 @@ def test_unsupported_question_returns_structured_unknown_intent(client, db_sessi
 def test_security_event_evidence_retrieved_for_authorized_owner(client, db_session):
     """5. Security event evidence is retrieved for authorized resource owners."""
     owner = db_session.query(User).filter_by(email="owner@gnosis.com").first()
-    token = create_access_token(subject=owner.id)
+    token = session_token(db_session, subject=owner.id)
 
     resp = client.post(
         "/ai/investigate",
@@ -197,7 +206,7 @@ def test_incident_evidence_retrieved(client, db_session):
     """6. Incident evidence is retrieved when authorized."""
     owner = db_session.query(User).filter_by(email="owner@gnosis.com").first()
     inc = db_session.query(Incident).first()
-    token = create_access_token(subject=owner.id)
+    token = session_token(db_session, subject=owner.id)
 
     resp = client.post(
         "/ai/investigate",
@@ -214,7 +223,7 @@ def test_incident_evidence_retrieved(client, db_session):
 def test_unauthorized_security_event_not_exposed(client, db_session):
     """7. Unauthorized users cannot retrieve security events for unowned resources."""
     unauth = db_session.query(User).filter_by(email="unauth@gnosis.com").first()
-    token = create_access_token(subject=unauth.id)
+    token = session_token(db_session, subject=unauth.id)
 
     resp = client.post(
         "/ai/investigate",
@@ -229,7 +238,7 @@ def test_unauthorized_incident_not_exposed(client, db_session):
     """8. Unauthorized users cannot retrieve incidents for unowned resources."""
     unauth = db_session.query(User).filter_by(email="unauth@gnosis.com").first()
     inc = db_session.query(Incident).first()
-    token = create_access_token(subject=unauth.id)
+    token = session_token(db_session, subject=unauth.id)
 
     resp = client.post(
         "/ai/investigate",
@@ -243,7 +252,7 @@ def test_unauthorized_incident_not_exposed(client, db_session):
 def test_investigator_performs_no_database_writes(client, db_session):
     """9. The investigator is strictly read-only and mutates zero database rows."""
     owner = db_session.query(User).filter_by(email="owner@gnosis.com").first()
-    token = create_access_token(subject=owner.id)
+    token = session_token(db_session, subject=owner.id)
 
     audit_count_before = db_session.query(AuditEvent).count()
     sec_count_before = db_session.query(SecurityEvent).count()
@@ -263,7 +272,7 @@ def test_investigator_performs_no_database_writes(client, db_session):
 def test_nonexistent_incident_id_returns_neutral_response(client, db_session):
     """10. Nonexistent incident_id returns a neutral response without leaking details or raising 500."""
     owner = db_session.query(User).filter_by(email="owner@gnosis.com").first()
-    token = create_access_token(subject=owner.id)
+    token = session_token(db_session, subject=owner.id)
 
     resp = client.post(
         "/ai/investigate",
@@ -340,10 +349,9 @@ def test_phase5b_resource_activity_boundary(db_session):
     owner_act = tools.get_resource_activity(db_session, owner, res.id, limit=5)
     assert len(owner_act) == 1
 
-    # Non-owner gets their own activity on that resource
+    # Acting on a resource does not grant administrative visibility.
     unauth_act = tools.get_resource_activity(db_session, unauth, res.id, limit=5)
-    assert len(unauth_act) == 1
-    assert unauth_act[0].actor_id == unauth.id
+    assert unauth_act == []
 
 
 def test_phase5b_incident_evidence_assembly(db_session):

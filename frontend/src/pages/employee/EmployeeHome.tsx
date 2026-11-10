@@ -106,11 +106,11 @@ export function EmployeeHome() {
             </span>
 
             <strong>
-              Authorized
+              Browse
             </strong>
 
             <p>
-              View the resources available to your account.
+              Browse metadata, then request records for backend authorization.
             </p>
 
           </div>
@@ -290,8 +290,8 @@ export function EmployeeHome() {
                 </strong>
 
                 <span>
-                  Browse the resources your account is
-                  authorized to access.
+                  Browse resource metadata. The backend checks access
+                  when you explicitly request records.
                 </span>
 
               </div>
@@ -347,7 +347,7 @@ export function EmployeeHome() {
                 </strong>
 
                 <span>
-                  {user.role}
+                  {user.organization_role || 'Identity unavailable'}
                 </span>
 
               </div>
@@ -378,8 +378,8 @@ export function EmployeeHome() {
                 </div>
 
                 <div>
-                  <span>Access level</span>
-                  <strong>{user.role}</strong>
+                  <span>Organizational role</span>
+                  <strong>{user.organization_role || 'Identity unavailable'}</strong>
                 </div>
 
               </div>

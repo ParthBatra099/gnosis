@@ -734,3 +734,8 @@
     transform: translateX(-50%);
     object-fit: contain;
 }
+.gnosis-mfa-material { margin: 1.5rem 0; padding: 1rem; border: 1px solid #46566c; border-radius: 12px; overflow-wrap: anywhere; }
+.gnosis-mfa-material dd { margin: .25rem 0 1rem; }
+.gnosis-mfa-material code { user-select: all; font-size: 1rem; }
+.gnosis-auth-secondary { display: block; margin: 1rem 0; padding: .75rem; color: inherit; background: transparent; border: 1px solid #66758a; border-radius: 8px; cursor: pointer; }
+.gnosis-recovery-choice { display: flex; align-items: start; gap: .75rem; line-height: 1.5; }

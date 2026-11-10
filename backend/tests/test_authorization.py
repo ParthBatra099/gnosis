@@ -5,7 +5,8 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.core.database import Base, get_db
-from app.core.security import create_access_token, hash_password
+from app.core.security import hash_password
+from tests.authentication_support import session_token, browser_post
 from app.main import app
 from app.models.department import Department
 from app.models.resource import Resource
@@ -37,6 +38,7 @@ def db_session():
         email="hr@gnosis.com",
         password_hash=hash_password("Pass123!"),
         role="EMPLOYEE",
+        organization_role="EMPLOYEE",
         department_id=hr_dept.id,
         active=True,
     )
@@ -45,6 +47,7 @@ def db_session():
         email="eng@gnosis.com",
         password_hash=hash_password("Pass123!"),
         role="EMPLOYEE",
+        organization_role="EMPLOYEE",
         department_id=eng_dept.id,
         active=True,
     )
@@ -53,6 +56,7 @@ def db_session():
         email="inactive_user@gnosis.com",
         password_hash=hash_password("Pass123!"),
         role="EMPLOYEE",
+        organization_role="EMPLOYEE",
         department_id=hr_dept.id,
         active=False,
     )
@@ -99,7 +103,7 @@ def client(db_session):
             pass
 
     app.dependency_overrides[get_db] = override_get_db
-    with TestClient(app) as c:
+    with TestClient(app, base_url="https://testserver", client=("127.0.0.1", 50000)) as c:
         yield c
     app.dependency_overrides.clear()
 
@@ -137,7 +141,7 @@ def test_unit_evaluate_access_unsupported_permission(db_session):
 def test_endpoint_allow_same_department_access(client, db_session):
     user = db_session.query(User).filter_by(email="hr@gnosis.com").first()
     res = db_session.query(Resource).filter_by(name="HR Payroll Data").first()
-    token = create_access_token(subject=user.id)
+    token = session_token(db_session, subject=user.id)
 
     response = client.get(
         f"/resources/{res.id}",
@@ -152,7 +156,7 @@ def test_endpoint_allow_same_department_access(client, db_session):
 def test_endpoint_deny_cross_department_access(client, db_session):
     user = db_session.query(User).filter_by(email="eng@gnosis.com").first()
     res = db_session.query(Resource).filter_by(name="HR Payroll Data").first()
-    token = create_access_token(subject=user.id)
+    token = session_token(db_session, subject=user.id)
 
     response = client.get(
         f"/resources/{res.id}",
@@ -171,7 +175,7 @@ def test_endpoint_unauthenticated_access(client, db_session):
 
 def test_endpoint_nonexistent_resource(client, db_session):
     user = db_session.query(User).filter_by(email="hr@gnosis.com").first()
-    token = create_access_token(subject=user.id)
+    token = session_token(db_session, subject=user.id)
 
     response = client.get(
         "/resources/nonexistent-id-9999",
@@ -183,7 +187,7 @@ def test_endpoint_nonexistent_resource(client, db_session):
 def test_endpoint_unsupported_permission(client, db_session):
     user = db_session.query(User).filter_by(email="hr@gnosis.com").first()
     res = db_session.query(Resource).filter_by(name="HR Payroll Data").first()
-    token = create_access_token(subject=user.id)
+    token = session_token(db_session, subject=user.id)
 
     response = client.get(
         f"/resources/{res.id}?permission=admin_override",

@@ -1,10 +1,12 @@
 import type { ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import { canPresentRoute, getDefaultRouteForUser } from '../utils/roles';
+import type { OrganizationRole } from '../types/auth';
 
 interface ProtectedRouteProps {
   children: ReactNode;
-  allowedRoles?: string[];
+  allowedRoles?: OrganizationRole[];
 }
 
 export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
@@ -25,15 +27,8 @@ export function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) 
     return <Navigate to="/login" replace />;
   }
 
-  if (allowedRoles && allowedRoles.length > 0) {
-    const userRoleUpper = user.role.toUpperCase();
-    const isAllowed = allowedRoles.some(
-      (role) => role.toUpperCase() === userRoleUpper
-    );
-
-    if (!isAllowed) {
-      return <Navigate to="/employee" replace />;
-    }
+  if (!canPresentRoute(user, allowedRoles)) {
+    return <Navigate to={getDefaultRouteForUser(user)} replace />;
   }
 
   return <>{children}</>;

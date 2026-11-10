@@ -1,0 +1,21 @@
+{
+  "version": "fictional-local-evaluation-v1",
+  "fictional": true,
+  "initial_super_admin": "00000000-0000-0000-0000-000000000001",
+  "departments": [
+    {"id":"00000000-0000-0000-0000-000000000010","name":"HR"},
+    {"id":"00000000-0000-0000-0000-000000000011","name":"Sales"},
+    {"id":"00000000-0000-0000-0000-000000000012","name":"Inventory"}
+  ],
+  "users": [
+    {"id":"00000000-0000-0000-0000-000000000001","name":"Fictional Super Admin","email":"demo-super@example.com","organization_role":"SUPER_ADMIN","department_id":"00000000-0000-0000-0000-000000000010"},
+    {"id":"00000000-0000-0000-0000-000000000002","name":"Fictional HR Administrator","email":"demo-admin-hr@example.com","organization_role":"DEPARTMENT_ADMIN","department_id":"00000000-0000-0000-0000-000000000010"},
+    {"id":"00000000-0000-0000-0000-000000000003","name":"Fictional Operations Administrator","email":"demo-admin-operations@example.com","organization_role":"DEPARTMENT_ADMIN","department_id":"00000000-0000-0000-0000-000000000011"},
+    {"id":"00000000-0000-0000-0000-000000000004","name":"Fictional HR Employee One","email":"demo-hr-one@example.com","organization_role":"EMPLOYEE","department_id":"00000000-0000-0000-0000-000000000010"},
+    {"id":"00000000-0000-0000-0000-000000000005","name":"Fictional HR Employee Two","email":"demo-hr-two@example.com","organization_role":"EMPLOYEE","department_id":"00000000-0000-0000-0000-000000000010"},
+    {"id":"00000000-0000-0000-0000-000000000006","name":"Fictional Sales Employee One","email":"demo-sales-one@example.com","organization_role":"EMPLOYEE","department_id":"00000000-0000-0000-0000-000000000011"},
+    {"id":"00000000-0000-0000-0000-000000000007","name":"Fictional Sales Employee Two","email":"demo-sales-two@example.com","organization_role":"EMPLOYEE","department_id":"00000000-0000-0000-0000-000000000011"},
+    {"id":"00000000-0000-0000-0000-000000000008","name":"Fictional Inventory Employee One","email":"demo-inventory-one@example.com","organization_role":"EMPLOYEE","department_id":"00000000-0000-0000-0000-000000000012"},
+    {"id":"00000000-0000-0000-0000-000000000009","name":"Fictional Inventory Employee Two","email":"demo-inventory-two@example.com","organization_role":"EMPLOYEE","department_id":"00000000-0000-0000-0000-000000000012"}
+  ]
+}

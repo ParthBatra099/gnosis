@@ -277,7 +277,7 @@ class AssistantService:
     @staticmethod
     def _handle_profile_query(user: User) -> AssistantQueryResult:
         return AssistantQueryResult(
-            answer=f"User Profile: Name = {user.name}, Email = {user.email}, Role = {user.role}.",
+            answer=f"User Profile: Name = {user.name}, Email = {user.email}, Canonical organizational role = {getattr(user.organization_role, 'value', user.organization_role) or 'UNASSIGNED'}.",
             sources=[f"User:{user.id}"],
             access_denied=False,
         )

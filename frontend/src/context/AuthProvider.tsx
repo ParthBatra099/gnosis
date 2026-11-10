@@ -1,82 +1,33 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import type { ReactNode } from 'react';
 import { AuthContext } from './AuthContext';
+import { AuthController } from './authController';
 import type { AuthContextType } from '../types/auth';
-import type { UserResponse } from '../types/api';
-import { login as loginApi, getCurrentUser } from '../api/auth';
-import { AUTH_TOKEN_KEY } from '../utils/constants';
 
-interface AuthProviderProps {
-  children: ReactNode;
-}
-
-export function AuthProvider({ children }: AuthProviderProps) {
-  const [user, setUser] = useState<UserResponse | null>(null);
-  const [token, setToken] = useState<string | null>(() =>
-    localStorage.getItem(AUTH_TOKEN_KEY)
-  );
-  const [isLoading, setIsLoading] = useState<boolean>(true);
-
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [controller] = useState(() => new AuthController());
+  const state = useSyncExternalStore(controller.subscribe, controller.snapshot);
   useEffect(() => {
-    async function initializeAuth() {
-      const storedToken = localStorage.getItem(AUTH_TOKEN_KEY);
-
-      if (!storedToken) {
-        setUser(null);
-        setToken(null);
-        setIsLoading(false);
-        return;
-      }
-
-      try {
-        const currentUser = await getCurrentUser();
-        setUser(currentUser);
-        setToken(storedToken);
-      } catch {
-        localStorage.removeItem(AUTH_TOKEN_KEY);
-        setUser(null);
-        setToken(null);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-
-    initializeAuth();
-  }, []);
-
-  const login = useCallback(async (email: string, password: string) => {
-    setIsLoading(true);
-    try {
-      const tokenData = await loginApi(email, password);
-      localStorage.setItem(AUTH_TOKEN_KEY, tokenData.access_token);
-      setToken(tokenData.access_token);
-
-      const currentUser = await getCurrentUser();
-      setUser(currentUser);
-    } catch (error) {
-      localStorage.removeItem(AUTH_TOKEN_KEY);
-      setToken(null);
-      setUser(null);
-      throw error;
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  const logout = useCallback(() => {
-    localStorage.removeItem(AUTH_TOKEN_KEY);
-    setToken(null);
-    setUser(null);
-  }, []);
-
+    // Remove the obsolete bearer value without reading or using it.
+    try { localStorage.removeItem('gnosis_auth_token'); } catch { /* Cookie auth does not require storage access. */ }
+    const disconnect = controller.connect();
+    void controller.restore();
+    const refresh = () => { if (document.visibilityState === 'visible') void controller.refresh(); };
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', refresh);
+    return () => {
+      disconnect();
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', refresh);
+    };
+  }, [controller]);
   const value: AuthContextType = {
-    user,
-    token,
-    isAuthenticated: Boolean(user && token),
-    isLoading,
-    login,
-    logout,
+    ...state,
+    isAuthenticated: state.stage === 'authenticated' && state.user !== null,
+    isLoading: state.stage === 'restoring',
+    login: controller.login, verify: controller.verify,
+    startEnrollment: controller.startEnrollment, finishRecoveryCodes: controller.finishRecoveryCodes,
+    restart: controller.restart, logout: controller.logout,
   };
-
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

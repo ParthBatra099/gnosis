@@ -1,12 +1,16 @@
 from datetime import datetime, timedelta, timezone
 import logging
 from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+from app.security import risk_scoring as policy
+from app.services.risk_service import snapshot, add_scopes, persist_assessment, utc, digest
 
 from app.models.audit_event import AuditEvent
 from app.models.incident import Incident
-from app.models.incident_event import IncidentEvent
 from app.models.resource import Resource
 from app.models.security_event import SecurityEvent
+from app.services.incident_coordination import attach_events, lock_incident_row, serialize_escalation
 
 logger = logging.getLogger("gnosis.detection")
 
@@ -16,6 +20,8 @@ def _escalate_security_event_to_incident(db: Session, sec_event: SecurityEvent) 
     if sec_event.severity not in {"HIGH", "CRITICAL"}:
         return
 
+    serialize_escalation(db)
+
     # Look for active OPEN or INVESTIGATING incident matching actor or resource
     query = db.query(Incident).filter(Incident.status.in_(["OPEN", "INVESTIGATING"]))
     if sec_event.resource_id:
@@ -23,7 +29,16 @@ def _escalate_security_event_to_incident(db: Session, sec_event: SecurityEvent) 
     elif sec_event.actor_id:
         query = query.filter(Incident.reporter_id == sec_event.actor_id)
 
-    existing_incident = query.order_by(Incident.created_at.desc()).first()
+    # The advisory lock covers no matching row; the parent lock is shared with
+    # manual writers. A manual status transition while waiting requires a fresh
+    # candidate search, not attachment to a now-resolved incident.
+    while True:
+        existing_incident = query.order_by(Incident.created_at.desc(), Incident.id.desc()).first()
+        if existing_incident is None:
+            break
+        existing_incident = lock_incident_row(db, existing_incident.id)
+        if existing_incident is not None and existing_incident.status in {"OPEN", "INVESTIGATING"}:
+            break
 
     if existing_incident:
         target_incident = existing_incident
@@ -39,139 +54,110 @@ def _escalate_security_event_to_incident(db: Session, sec_event: SecurityEvent) 
         db.add(target_incident)
         db.flush()
 
-    # Avoid duplicate IncidentEvent linkages
-    link_exists = (
-        db.query(IncidentEvent)
-        .filter(
-            IncidentEvent.incident_id == target_incident.id,
-            IncidentEvent.security_event_id == sec_event.id,
-        )
-        .first()
-    )
-    if not link_exists:
-        inc_event = IncidentEvent(
-            incident_id=target_incident.id,
-            security_event_id=sec_event.id,
-        )
-        db.add(inc_event)
+    attach_events(db, target_incident, [sec_event.id])
 
 
 def evaluate_detection_rules(db: Session, audit_event: AuditEvent) -> list[SecurityEvent]:
-    """
-    Evaluates deterministic security rules against incoming audit events.
-    Failsafe: Never raises exceptions or affects upstream workflow execution.
-    """
-    security_events: list[SecurityEvent] = []
+    """Flush only: caller owns commit/rollback. Non-resource actions are irrelevant."""
+    if audit_event.action != "RESOURCE_ACCESS" or audit_event.outcome not in {"ALLOW", "DENY"}:
+        return []
+    return observe(db, actor_id=audit_event.actor_id, at=audit_event.timestamp, audit=audit_event)
+
+
+def evaluate_disclosure_rules(db: Session, response_id: str) -> list[SecurityEvent]:
+    """Process committed application evidence; no ALLOW-to-disclosure inference."""
+    from sqlalchemy import select
+    from app.models import DataDisclosure
+    rows = db.scalars(select(DataDisclosure).where(DataDisclosure.response_id == response_id)).all()
+    if not rows:
+        return []
+    return observe(db, actor_id=rows[0].actor_id, at=max(row.timestamp for row in rows), response_id=response_id)
+
+
+def emit(db, *, actor_id, rule, severity, resource_id, audit_id, at, start, threshold, count,
+         evidence, departments, response_id=None, session_ref=None):
+    # Acquire before INSERTs/unique-key waits, and retain through the outer commit.
+    serialize_escalation(db)
+    bucket = int(at.timestamp()) // (policy.WINDOW_MINUTES * 60)
+    # A later denial must not be suppressed by an earlier allowed critical access.
+    # Severity transitions are bounded; critical resources retain separate episodes.
+    key = digest([policy.POLICY_VERSION, actor_id, rule, severity,
+                  resource_id if rule == "CRITICAL_RESOURCE_ACCESS" else None, bucket])
+    existing = db.scalar(select(SecurityEvent).where(SecurityEvent.episode_key == key))
+    if existing:
+        return None
+    description = f"{rule}: observed {count}; threshold {threshold}. Review evidence; no permission change."
+    event = SecurityEvent(episode_key=key, event_type=rule, severity=severity, actor_id=actor_id,
+        resource_id=resource_id, source_audit_id=audit_id, timestamp=at, description=description,
+        evidence={**evidence, "rule": rule, "policy_version": policy.POLICY_VERSION,
+                  "window_start": start.isoformat(), "window_end": at.isoformat(),
+                  "threshold": threshold, "count": count, "response_id": response_id, "session_ref": session_ref})
     try:
-        now = datetime.now(timezone.utc)
+        with db.begin_nested():
+            db.add(event)
+            db.flush()
+            add_scopes(db, departments, event_id=event.id)
+            _escalate_security_event_to_incident(db, event)
+    except IntegrityError:
+        # Only a proven competing episode is a safe duplicate; other errors propagate.
+        if db.scalar(select(SecurityEvent.id).where(SecurityEvent.episode_key == key)):
+            return None
+        raise
+    return event
 
-        # Rule 1: REPEATED_DENIED_ACCESS (>= 3 RESOURCE_ACCESS_DENIED in last 15 min)
-        if (
-            audit_event.action == "RESOURCE_ACCESS"
-            and audit_event.outcome == "DENY"
-            and audit_event.actor_id
-        ):
-            time_window = now - timedelta(minutes=15)
-            denied_count = (
-                db.query(AuditEvent)
-                .filter(
-                    AuditEvent.actor_id == audit_event.actor_id,
-                    AuditEvent.action == "RESOURCE_ACCESS",
-                    AuditEvent.outcome == "DENY",
-                    AuditEvent.timestamp >= time_window,
-                )
-                .count()
-            )
-            if denied_count >= 3:
-                sec_event = SecurityEvent(
-                    event_type="REPEATED_DENIED_ACCESS",
-                    severity="HIGH",
-                    actor_id=audit_event.actor_id,
-                    resource_id=audit_event.resource_id,
-                    source_audit_id=audit_event.id,
-                    description=f"Actor {audit_event.actor_id} breached threshold with {denied_count} denied access attempts in 15 minutes.",
-                )
-                db.add(sec_event)
-                db.flush()
-                _escalate_security_event_to_incident(db, sec_event)
-                security_events.append(sec_event)
 
-        # Rule 2: CRITICAL_RESOURCE_ACCESS
-        if audit_event.resource_id:
-            resource = db.query(Resource).filter(Resource.id == audit_event.resource_id).first()
-            if resource and resource.sensitivity == "CRITICAL":
-                severity = "CRITICAL" if audit_event.outcome == "DENY" else "MEDIUM"
-                sec_event = SecurityEvent(
-                    event_type="CRITICAL_RESOURCE_ACCESS",
-                    severity=severity,
-                    actor_id=audit_event.actor_id,
-                    resource_id=audit_event.resource_id,
-                    source_audit_id=audit_event.id,
-                    description=f"CRITICAL resource '{resource.name}' access attempt with outcome '{audit_event.outcome}'.",
-                )
-                db.add(sec_event)
-                db.flush()
-                _escalate_security_event_to_incident(db, sec_event)
-                security_events.append(sec_event)
-
-        # Rule 3: CROSS_DEPARTMENT_ANOMALY
-        if (
-            audit_event.action == "RESOURCE_ACCESS"
-            and audit_event.outcome == "DENY"
-            and audit_event.reason == "DENY_DEPARTMENT_MISMATCH"
-            and audit_event.actor_id
-        ):
-            time_window = now - timedelta(minutes=10)
-            distinct_denied_resources = (
-                db.query(AuditEvent.resource_id)
-                .filter(
-                    AuditEvent.actor_id == audit_event.actor_id,
-                    AuditEvent.action == "RESOURCE_ACCESS",
-                    AuditEvent.outcome == "DENY",
-                    AuditEvent.reason == "DENY_DEPARTMENT_MISMATCH",
-                    AuditEvent.timestamp >= time_window,
-                )
-                .distinct()
-                .count()
-            )
-            if distinct_denied_resources >= 2:
-                sec_event = SecurityEvent(
-                    event_type="CROSS_DEPARTMENT_ANOMALY",
-                    severity="HIGH",
-                    actor_id=audit_event.actor_id,
-                    resource_id=audit_event.resource_id,
-                    source_audit_id=audit_event.id,
-                    description=f"Actor {audit_event.actor_id} probed {distinct_denied_resources} distinct cross-department resources within 10 minutes.",
-                )
-                db.add(sec_event)
-                db.flush()
-                _escalate_security_event_to_incident(db, sec_event)
-                security_events.append(sec_event)
-
-        # Rule 4: AFTER_HOURS_ACCESS
-        event_time = audit_event.timestamp
-        if event_time.tzinfo is None:
-            event_time = event_time.replace(tzinfo=timezone.utc)
-
-        hour = event_time.hour
-        if hour >= 22 or hour < 5:
-            if audit_event.action == "RESOURCE_ACCESS" and audit_event.outcome == "ALLOW":
-                sec_event = SecurityEvent(
-                    event_type="AFTER_HOURS_ACCESS",
-                    severity="LOW",
-                    actor_id=audit_event.actor_id,
-                    resource_id=audit_event.resource_id,
-                    source_audit_id=audit_event.id,
-                    description=f"Resource access observed outside operating window (22:00-05:00 UTC) at hour {hour}.",
-                )
-                db.add(sec_event)
-                db.flush()
-                _escalate_security_event_to_incident(db, sec_event)
-                security_events.append(sec_event)
-
-        db.commit()
-    except Exception as err:
-        logger.error(f"Detection engine error: {err}")
-        db.rollback()
-
-    return security_events
+def observe(db, *, actor_id, at, audit=None, response_id=None):
+    if not actor_id:
+        return []
+    at = utc(at)
+    start = at - timedelta(minutes=policy.WINDOW_MINUTES)
+    data = snapshot(db, actor_id, start, at)
+    metrics, evidence, departments, audits, disclosures = data
+    trigger_context = audit.context_data or {} if audit else {}
+    request_key = response_id or trigger_context.get("response_id") or (audit.id if audit else None)
+    matching = [d for d in disclosures if d.response_id == response_id] if response_id else []
+    session_ref = matching[0].session_ref if matching else trigger_context.get("session_ref")
+    resource_id = matching[0].resource_id if matching else audit.resource_id if audit else None
+    rules = []
+    if audit and audit.outcome == "DENY" and metrics["denials"] >= policy.DENIAL_THRESHOLD:
+        rules.append(("REPEATED_DENIED_ACCESS", "HIGH", metrics["denials"], policy.DENIAL_THRESHOLD, data, start))
+    if audit:
+        resource = db.get(Resource, audit.resource_id) if audit.resource_id else None
+        sensitivity = trigger_context.get("sensitivity") or (resource.sensitivity if resource else None)
+        if sensitivity == "CRITICAL":
+            rules.append(("CRITICAL_RESOURCE_ACCESS", "CRITICAL" if audit.outcome == "DENY" else "MEDIUM", 1, 1, data, start))
+        cross_start = at - timedelta(minutes=10)
+        cross_data = snapshot(db, actor_id, cross_start, at)
+        cross = [a for a in cross_data[3] if a.outcome == "DENY" and a.reason == "DENY_DEPARTMENT_MISMATCH"]
+        count = len({a.resource_id for a in cross if a.resource_id})
+        if audit.outcome == "DENY" and audit.reason == "DENY_DEPARTMENT_MISMATCH" and count >= 2:
+            rules.append(("CROSS_DEPARTMENT_ANOMALY", "HIGH", count, 2, cross_data, cross_start))
+        if audit.outcome == "ALLOW" and (at.hour >= 22 or at.hour < 5):
+            rules.append(("AFTER_HOURS_ACCESS", "LOW", 1, 1, data, start))
+    if response_id:
+        if metrics["sensitive_responses"] >= policy.SENSITIVE_THRESHOLD:
+            rules.append(("REPEATED_SENSITIVE_DISCLOSURE", "HIGH", metrics["sensitive_responses"], policy.SENSITIVE_THRESHOLD, data, start))
+        if metrics["distinct_records"] >= policy.BULK_THRESHOLD:
+            rules.append(("BULK_DATA_DISCLOSURE", "HIGH", metrics["distinct_records"], policy.BULK_THRESHOLD, data, start))
+    if audit and trigger_context.get("representation") == "business_records" and metrics["business_attempts"] >= policy.FREQUENCY_THRESHOLD:
+        rules.append(("REQUEST_FREQUENCY_ANOMALY", "MEDIUM", metrics["business_attempts"], policy.FREQUENCY_THRESHOLD, data, start))
+    if metrics["departments"] >= policy.DEPARTMENT_THRESHOLD:
+        # Legitimate granted cross-department activity is a review signal, not a violation.
+        severity = "HIGH" if metrics["denials"] >= policy.DENIAL_THRESHOLD else "LOW"
+        rules.append(("DEPARTMENT_HOPPING", severity, metrics["departments"], policy.DEPARTMENT_THRESHOLD, data, start))
+    emitted = []
+    for rule, severity, count, threshold, supporting, window_start in rules:
+        event = emit(db, actor_id=actor_id, rule=rule, severity=severity, resource_id=resource_id,
+            audit_id=audit.id if audit else None, at=at, start=window_start, threshold=threshold, count=count,
+            evidence=supporting[1], departments=supporting[2], response_id=response_id, session_ref=session_ref)
+        if event:
+            emitted.append(event)
+    # Assess after detection so existing severity is represented, with full scope provenance.
+    persist_assessment(db, actor_id, "EMPLOYEE", actor_id, at, start, snapshot(db, actor_id, start, at))
+    if request_key:
+        persist_assessment(db, actor_id, "REQUEST", request_key, at, start,
+                           snapshot(db, actor_id, start, at, request_key=request_key))
+    if session_ref:
+        persist_assessment(db, actor_id, "SESSION", session_ref, at, start,
+                           snapshot(db, actor_id, start, at, session_ref=session_ref))
+    return emitted

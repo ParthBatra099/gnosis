@@ -1,13 +1,14 @@
 from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
-from sqlalchemy import String, Text
+from sqlalchemy import Boolean, Index, String, Text, func, true
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 
 if TYPE_CHECKING:
     from app.models.user import User
     from app.models.resource import Resource
+    from app.models.department_admin_assignment import DepartmentAdminAssignment
 
 
 class Department(Base):
@@ -25,6 +26,7 @@ class Department(Base):
         index=True,
     )
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
 
     users: Mapped[list[User]] = relationship(
         "User",
@@ -36,3 +38,11 @@ class Department(Base):
         back_populates="department",
         cascade="all, delete-orphan",
     )
+    admin_assignments: Mapped[list[DepartmentAdminAssignment]] = relationship(
+        "DepartmentAdminAssignment",
+        back_populates="department",
+        passive_deletes="all",
+    )
+
+
+Index("uq_departments_name_normalized", func.lower(func.trim(Department.name)), unique=True)
