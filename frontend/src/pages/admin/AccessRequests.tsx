@@ -48,7 +48,23 @@ export function AccessRequests() {
     }
 
     useEffect(() => {
-        loadRequests();
+        let active = true;
+
+        getPendingAccessRequests()
+            .then((data) => {
+                if (active) setRequests(data);
+            })
+            .catch((err: unknown) => {
+                if (active) {
+                    console.error(err);
+                    setError('Unable to load pending access requests.');
+                }
+            })
+            .finally(() => {
+                if (active) setLoading(false);
+            });
+
+        return () => { active = false; };
     }, []);
 
     async function handleApprove(requestId: string) {

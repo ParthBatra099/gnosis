@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
+import { isAxiosError } from 'axios';
 
 import {
     createAccessRequest,
@@ -92,9 +93,10 @@ export function AccessRequests() {
             setSuccess(
                 'Your access request has been submitted successfully.'
             );
-        } catch (requestError: any) {
-            const detail =
-                requestError?.response?.data?.detail;
+        } catch (requestError: unknown) {
+            const detail = isAxiosError<{ detail?: unknown }>(requestError)
+                ? requestError.response?.data?.detail
+                : undefined;
 
             if (typeof detail === 'string') {
                 setError(detail);
